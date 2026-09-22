@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Pagos — San Antonio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#ffffff; --ink:#1f2430; --ink-soft:#5b6270;
+    --line:#e4e6eb; --accent:#2f5fae;
+    --green-bg:#e7f6ec; --green-ink:#1a7a3d; --green-dot:#22a352;
+    --amber-bg:#fff3e0; --amber-ink:#b56400; --amber-dot:#e08a00;
+    --red-bg:#fdecec; --red-ink:#b3261e; --red-dot:#e04437;
+    --slate-bg:#eef1f6; --slate-ink:#556077;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:24px 16px 64px;}
+  header{margin-bottom:12px;}
+  .tag{
+    display:inline-block; font-size:12px; font-weight:600; letter-spacing:.02em;
+    background:var(--slate-bg); color:var(--slate-ink); padding:4px 10px; border-radius:999px;
+    margin-bottom:10px;
+  }
+  h1{font-size:22px; margin:0 0 4px; line-height:1.3;}
+  .subtitle{color:var(--ink-soft); font-size:14px; margin:0; max-width:700px;}
+  .toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:16px;}
+  .toolbar label{font-size:13px; font-weight:600; color:var(--ink-soft);}
+  select, input, textarea{
+    font-family:inherit; font-size:13.5px; padding:7px 10px; border:1px solid var(--line);
+    border-radius:8px; background:#fff; color:var(--ink);
+  }
+  select.mini{padding:4px 6px; font-size:12px; border-radius:6px;}
+  nav{display:flex; gap:4px; margin:18px 0 18px; border-bottom:1px solid var(--line); overflow-x:auto;}
+  nav button{
+    appearance:none; border:none; background:none; padding:10px 14px; font-size:14px;
+    font-weight:600; color:var(--ink-soft); cursor:pointer; border-bottom:2px solid transparent;
+    white-space:nowrap;
+  }
+  nav button.active{color:var(--accent); border-bottom-color:var(--accent);}
+  section{display:none;}
+  section.active{display:block;}
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:20px;}
+  .kpi{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px;}
+  .kpi .label{font-size:12px; color:var(--ink-soft); margin-bottom:6px;}
+  .kpi .value{font-size:20px; font-weight:700;}
+  .kpi .value.amber{color:var(--amber-ink);}
+  .kpi .value.red{color:var(--red-ink);}
+  .kpi .value.green{color:var(--green-ink);}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px;}
+  .card-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .card h2{font-size:15px; margin:0 0 4px;}
+  .card p.hint{font-size:13px; color:var(--ink-soft); margin:0 0 14px;}
+  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  th{text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft); padding:8px 10px; border-bottom:1px solid var(--line);}
+  td{padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  .tablewrap{overflow-x:auto;}
+  .badge{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px;}
+  .badge .dot{width:6px; height:6px; border-radius:50%;}
+  .badge.pagada{background:var(--green-bg); color:var(--green-ink);}
+  .badge.pagada .dot{background:var(--green-dot);}
+  .badge.pendiente{background:var(--amber-bg); color:var(--amber-ink);}
+  .badge.pendiente .dot{background:var(--amber-dot);}
+  .badge.alerta{background:var(--red-bg); color:var(--red-ink);}
+  .badge.alerta .dot{background:var(--red-dot);}
+  .badge.neutro{background:var(--slate-bg); color:var(--slate-ink);}
+  .muted{color:var(--ink-soft);}
+  button.action{
+    appearance:none; border:1px solid var(--accent); background:#fff; color:var(--accent);
+    font-size:12px; font-weight:600; padding:5px 10px; border-radius:7px; cursor:pointer;
+  }
+  button.action:hover{background:#eef3fb;}
+  button.action.ghost{border-color:var(--line); color:var(--ink-soft);}
+  button.action[disabled], button.primary[disabled]{opacity:.5; cursor:default;}
+  .mono{font-variant-numeric:tabular-nums;}
+  details.contratista{border:1px solid var(--line); border-radius:12px; margin-bottom:10px; overflow:hidden;}
+  details.contratista summary{
+    list-style:none; cursor:pointer; padding:14px 16px; display:flex; align-items:center;
+    justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
+  details.contratista summary::-webkit-details-marker{display:none;}
+  .sum-left{display:flex; flex-direction:column; gap:2px;}
+  .sum-left .nombre{font-weight:700; font-size:14.5px;}
+  .sum-left .nit{font-size:12px; color:var(--ink-soft);}
+  .sum-right{display:flex; gap:18px; align-items:center; flex-wrap:wrap;}
+  .stat{text-align:right;}
+  .stat .l{font-size:11px; color:var(--ink-soft);}
+  .stat .v{font-size:14.5px; font-weight:700;}
+  .detail-body{padding:0 16px 16px;}
+  .note{background:var(--slate-bg); border-radius:10px; padding:12px 14px; font-size:12.5px; color:var(--slate-ink); margin-top:6px;}
+  .footer-note{font-size:12px; color:var(--ink-soft); margin-top:28px; line-height:1.6;}
+  .row-actions{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
+  .lanes{display:grid; grid-template-columns:1fr; gap:16px;}
+  @media(min-width:760px){ .lanes{grid-template-columns:1fr 1fr;} }
+  .field{display:flex; flex-direction:column; gap:4px; margin-bottom:10px;}
+  .field label{font-size:12px; font-weight:600; color:var(--ink-soft);}
+  .checkfield{display:flex; align-items:center; gap:8px; margin:10px 0 14px; font-size:13px;}
+  .checkfield input{width:auto;}
+  textarea.bulk{width:100%; min-height:110px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px;}
+  .btnrow{display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;}
+  button.primary{
+    appearance:none; border:none; background:var(--accent); color:#fff; font-size:13px; font-weight:600;
+    padding:8px 14px; border-radius:8px; cursor:pointer;
+  }
+  button.primary:hover{opacity:.92;}
+  .filerow{display:flex; align-items:center; gap:8px; font-size:12.5px; flex-wrap:wrap;}
+  .lanehead{font-size:13px; font-weight:700; margin-bottom:2px;}
+  .lanesub{font-size:12px; color:var(--ink-soft); margin:0 0 12px;}
+  .confirm{font-size:12.5px; color:var(--green-ink); background:var(--green-bg); padding:6px 10px; border-radius:7px; display:none; margin-top:8px;}
+  .reco{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px;}
+  .reco .box{background:var(--slate-bg); border-radius:10px; padding:12px 14px;}
+  .reco .box .l{font-size:11.5px; color:var(--ink-soft); margin-bottom:4px;}
+  .reco .box .v{font-size:16px; font-weight:700;}
+  #statusBar{display:none; background:var(--slate-bg); color:var(--slate-ink); font-size:13px; padding:8px 16px; text-align:center;}
+  #statusBar.error{background:var(--red-bg); color:var(--red-ink);}
+  #statusBar.loading{display:block;}
+</style>
+</head>
+<body>
+<div id="statusBar"></div>
+<div class="wrap">
+  <header>
+    <span class="tag">Proyecto San Antonio · HABI+TAD / CONSTRUCTHOR</span>
+    <h1>Control de Pagos · Nómina, Facturas, Anticipos y Banco</h1>
+    <p class="subtitle">El soporte de pago abre y cierra cada registro y mueve el saldo del banco correspondiente. La OC y la factura/XML se enganchan después, sin bloquear nada.</p>
+    <div class="toolbar">
+      <label for="periodoFiltro">Período (Resumen · Nómina · Facturas · Anticipos)</label>
+      <select id="periodoFiltro" onchange="onPeriodoChange()">
+        <option value="todos">Todos los meses</option>
+        <option value="2026-05">Mayo 2026</option>
+        <option value="2026-06">Junio 2026</option>
+        <option value="2026-07">Julio 2026</option>
+        <option value="2026-08">Agosto 2026</option>
+        <option value="2026-09">Septiembre 2026</option>
+        <option value="2026-10">Octubre 2026</option>
+        <option value="2026-11">Noviembre 2026</option>
+        <option value="2026-12">Diciembre 2026</option>
+      </select>
+      <button class="action ghost" onclick="init()">↻ Actualizar datos</button>
+    </div>
+  </header>
+
+  <nav>
+    <button class="active" data-tab="resumen">Resumen</button>
+    <button data-tab="nomina">Nómina</button>
+    <button data-tab="facturas">Facturas y pagos</button>
+    <button data-tab="anticipos">Anticipos</button>
+    <button data-tab="banco">Banco</button>
+    <button data-tab="cargar">Cargar pagos</button>
+  </nav>
+
+  <section id="resumen" class="active">
+    <div class="kpis">
+      <div class="kpi"><div class="label">Pagado en el período</div><div class="value" id="kpiPagado">—</div></div>
+      <div class="kpi"><div class="label">Pendiente de pago</div><div class="value amber" id="kpiPendiente">—</div></div>
+      <div class="kpi"><div class="label">Anticipos sin legalizar</div><div class="value amber" id="kpiAnticipos">—</div></div>
+      <div class="kpi"><div class="label">Alertas activas</div><div class="value red" id="kpiAlertas">—</div></div>
+    </div>
+    <div class="card">
+      <h2>Alertas</h2>
+      <p class="hint">Anticipo sin legalizar hace más de 30 días, o pago marcado como pagado hace más de 15 días sin factura/XML vinculado. No dependen del período seleccionado.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Tipo</th><th>Quién</th><th>Detalle</th><th>Días</th></tr></thead>
+        <tbody id="alertasBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="nomina">
+    <div class="card">
+      <div class="card-head">
+        <div><h2>Nómina por período</h2><p class="hint">Al subir el soporte del pago se marca "Pagada" y se registra el movimiento en el banco elegido.</p></div>
+        <button class="action" onclick="exportNomina()">Exportar a Excel (.xlsx)</button>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Empleado</th><th>Período</th><th>Valor</th><th>Estado</th><th>Banco</th><th>Soporte</th><th>Acción</th></tr></thead>
+        <tbody id="nominaBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="facturas">
+    <div class="card">
+      <div class="card-head">
+        <div><h2>Facturas y pagos a proveedores</h2><p class="hint">El soporte de pago abre el registro, lo marca "Pagada" y mueve el banco elegido. La OC/OS y la factura XML se vinculan cuando lleguen.</p></div>
+        <button class="action" onclick="exportFacturas()">Exportar a Excel (.xlsx)</button>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Fecha</th><th>Beneficiario</th><th>Concepto</th><th>Valor</th><th>OC/OS</th><th>Banco</th><th>Estado</th><th>Factura/XML</th></tr></thead>
+        <tbody id="facturasBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="anticipos">
+    <div class="card">
+      <div class="card-head">
+        <div><h2>Anticipos a proveedores y contratistas</h2><p class="hint">Saldo vivo por contratista: anticipado, legalizado y pendiente. El detalle respeta el período elegido arriba.</p></div>
+        <button class="action" onclick="exportAnticipos()">Exportar a Excel (.xlsx)</button>
+      </div>
+      <div id="anticiposList"></div>
+    </div>
+  </section>
+
+  <section id="banco">
+    <div class="card">
+      <div class="card-head">
+        <div><h2>Movimiento de banco</h2><p class="hint">Cada pago marcado como "Pagada" (nómina o facturas) genera aquí un movimiento y mueve el saldo. Este saldo es acumulado desde el inicio; no lo filtra el período de arriba.</p></div>
+        <button class="action" onclick="exportBanco()">Exportar a Excel (.xlsx)</button>
+      </div>
+      <div class="toolbar" style="margin-top:0;">
+        <label for="bancoSel">Cuenta</label>
+        <select id="bancoSel" onchange="renderBanco()">
+          <option value="CONSTRUCTHOR-8695">Bancolombia · CONSTRUCTHOR (cta 8695)</option>
+          <option value="HABITAD-CAJA">Caja Social · HABI+TAD</option>
+        </select>
+      </div>
+      <div class="reco">
+        <div class="box"><div class="l">Saldo según el sistema</div><div class="v" id="bancoSaldoSistema">—</div></div>
+        <div class="box">
+          <div class="l">Saldo según extracto del banco</div>
+          <input type="number" id="bancoExtracto" placeholder="Lo llenas cuando llegue el extracto" oninput="renderBanco()" style="width:100%; margin-top:2px;">
+        </div>
+        <div class="box"><div class="l">Diferencia</div><div class="v" id="bancoDiferencia">—</div></div>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th>Valor</th><th>Saldo</th></tr></thead>
+        <tbody id="bancoBody"></tbody>
+      </table></div>
+      <div class="note">
+        Los "Pago" nacen solos cuando marcas algo como pagado. Los "Ajuste" son los que agregas a mano cada mes al leer el extracto — 4x1000, intereses, comisiones, retenciones. El saldo inicial de cada cuenta se lee de la tabla "Banco cuentas" en Airtable.
+      </div>
+      <div class="lanehead" style="margin-top:16px;">Agregar ajuste de banco (4x1000, intereses, comisiones…)</div>
+      <div class="lanes">
+        <div>
+          <div class="field"><label>Fecha</label><input type="date" id="ajFecha"></div>
+          <div class="field"><label>Descripción</label><input type="text" id="ajDesc" placeholder="Ej. GMF 4x1000"></div>
+        </div>
+        <div>
+          <div class="field"><label>Valor (negativo si es un cargo)</label><input type="number" id="ajValor" placeholder="-95000"></div>
+          <div class="btnrow"><button class="primary" onclick="agregarAjuste()">Agregar a esta cuenta</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="cargar">
+    <div class="card">
+      <h2>Cómo sube la información</h2>
+      <p class="hint">Dos formas de alimentar el sistema, para que el soporte de pago no sea un cuello de botella cuando no lo tienes a mano todavía. Nota: por ahora el archivo del soporte se sigue adjuntando directamente en Airtable (abriendo el registro); aquí solo se marca el estado.</p>
+      <div class="lanes">
+        <div>
+          <div class="lanehead">1 · Registro puntual</div>
+          <p class="lanesub">Para un pago suelto o urgente a un proveedor/contratista. Queda registrado al instante, con o sin soporte.</p>
+          <div class="field"><label>Fecha</label><input type="date" id="qFecha"></div>
+          <div class="field"><label>Beneficiario</label><input type="text" id="qBen" placeholder="Ej. Ferretería El Tornillo SAS"></div>
+          <div class="field"><label>Concepto</label><input type="text" id="qConcepto" placeholder="Ej. Materiales obra"></div>
+          <div class="field"><label>Valor</label><input type="number" id="qValor" placeholder="0"></div>
+          <div class="field"><label>OC/OS (si aplica)</label><input type="text" id="qOC" placeholder="Opcional"></div>
+          <div class="field"><label>Cuenta bancaria (de donde sale el pago)</label>
+            <select id="qBanco">
+              <option value="CONSTRUCTHOR-8695">Bancolombia · CONSTRUCTHOR (cta 8695)</option>
+              <option value="HABITAD-CAJA">Caja Social · HABI+TAD</option>
+            </select>
+          </div>
+          <div class="checkfield">
+            <input type="checkbox" id="qSoporte">
+            <label for="qSoporte">Ya tengo el soporte de pago (si no, queda "Pendiente" y no mueve el banco todavía)</label>
+          </div>
+          <div class="btnrow"><button class="primary" onclick="registrarPuntual()" id="btnRegistrarPuntual">Registrar pago</button></div>
+          <div class="confirm" id="qConfirm">Registrado en Airtable. Ya aparece en "Facturas y pagos" (y en Banco, si marcaste soporte).</div>
+        </div>
+        <div>
+          <div class="lanehead">2 · Carga semanal o mensual en bloque</div>
+          <p class="lanesub">Sirve tanto para nómina como para facturas y pagos a proveedores en la misma carga — la primera columna dice cuál es cuál. Pega las filas (tipo, fecha, nombre, concepto, valor, OC, soporte sí/no, cuenta) o sube el Excel/CSV con esas columnas.</p>
+          <div class="field"><label>Período de estos pagos (si la fecha de la fila no trae mes claro)</label>
+            <select id="bPeriodo">
+              <option value="2026-09">Septiembre 2026</option>
+              <option value="2026-08">Agosto 2026</option>
+              <option value="2026-07">Julio 2026</option>
+              <option value="2026-06">Junio 2026</option>
+              <option value="2026-05">Mayo 2026</option>
+              <option value="2026-10">Octubre 2026</option>
+            </select>
+          </div>
+          <textarea class="bulk" id="bulkText" placeholder="factura,2026-09-15,Transportes Boyacá,Transporte materiales,1850000,,no,CONSTRUCTHOR-8695
+nomina,2026-09-15,Yesenia Camargo,,780000,,si,HABITAD-CAJA"></textarea>
+          <div class="btnrow">
+            <button class="primary" onclick="procesarBulk()" id="btnProcesarBulk">Procesar filas pegadas</button>
+            <button class="action ghost" onclick="descargarPlantilla()">Descargar plantilla Excel</button>
+          </div>
+          <div class="filerow" style="margin-top:10px;">
+            <label class="muted">o sube el archivo ya diligenciado:</label>
+            <input type="file" id="bulkFile" accept=".csv,.xlsx,.xls" onchange="procesarArchivo(event)">
+          </div>
+          <div class="confirm" id="bConfirm"></div>
+        </div>
+      </div>
+      <div class="note">Si aún no hay soporte, el registro queda "Pendiente" (en Nómina o en Facturas y pagos, según el tipo) y no mueve el banco todavía. El día que subas el soporte lo marcas "Pagada" desde esa pestaña y ahí sí se refleja en Banco.</div>
+    </div>
+  </section>
+</div>
+
+<script>
+// ============================================================
+// Conexión a Airtable vía proxy de Google Apps Script
+// ============================================================
+const API_BASE = 'https://script.google.com/macros/s/AKfycbwBQXDe015KDctTxyR1RbioI8Jp3vnOiVJo2Cqp0cyR-UI2v_bLCijYzS_RWUrt3Wtf/exec';
+
+const money = n => Number(n||0).toLocaleString('es-CO', {style:'currency', currency:'COP', maximumFractionDigits:0});
+let periodoActual = 'todos';
+// OJO: estos textos deben ser EXACTAMENTE iguales a las opciones de Selección única creadas en Airtable
+const BANCOS = {'CONSTRUCTHOR-8695':'Bancolombia CONSTRUCTHOR (cta 8695)', 'HABITAD-CAJA':'Caja Social HABI+TAD'};
+function bancoLabel(k){ return k ? (BANCOS[k]||k) : '—'; }
+function bancoKeyFromLabel(label){ if(!label) return null; for(const k in BANCOS){ if(BANCOS[k]===label) return k; } return null; }
+
+let nomina = [];
+let facturas = [];
+let anticipos = [];
+let bancos = {
+  'CONSTRUCTHOR-8695': { saldoInicial: 0, movimientos: [] },
+  'HABITAD-CAJA': { saldoInicial: 0, movimientos: [] }
+};
+
+// ---- helpers de fecha ----
+function periodoDe(fechaISO){ return (fechaISO||'').slice(0,7); }
+function pasaFiltro(periodo){ return periodoActual==="todos" || periodo===periodoActual; }
+function hoyISO(){ return new Date().toISOString().slice(0,10); }
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function fechaCorta(fechaISO){
+  if(!fechaISO) return '';
+  const p = fechaISO.split('-'); if(p.length<3) return fechaISO;
+  return `${p[2]} ${MESES[parseInt(p[1],10)-1]||''}`;
+}
+function diasDesde(fechaISO){
+  if(!fechaISO) return 0;
+  const d = new Date(fechaISO+'T00:00:00');
+  if(isNaN(d)) return 0;
+  return Math.floor((Date.now()-d.getTime())/86400000);
+}
+function estadoAirtable(x){ return x==='pagada' ? 'Pagada' : 'Pendiente'; }
+
+function saldoContratista(c){ return c.movs.reduce((s,m)=>s+m.valor,0); }
+function totalAnticipado(c){ return c.movs.filter(m=>m.valor>0).reduce((s,m)=>s+m.valor,0); }
+function totalLegalizado(c){ return -c.movs.filter(m=>m.valor<0).reduce((s,m)=>s+m.valor,0); }
+
+// ============================================================
+// Capa de datos: leer y escribir en Airtable a través del proxy
+// ============================================================
+async function atList(table){
+  let all = [], offset = null;
+  do{
+    let url = API_BASE + '?table=' + encodeURIComponent(table);
+    if(offset) url += '&offset=' + encodeURIComponent(offset);
+    const res = await fetch(url);
+    const json = await res.json();
+    if(json.error) throw new Error(table + ': ' + json.error);
+    all = all.concat(json.records||[]);
+    offset = json.offset || null;
+  } while(offset);
+  return all;
+}
+async function atWrite(table, action, records){
+  const chunks = [];
+  for(let i=0;i<records.length;i+=10) chunks.push(records.slice(i,i+10));
+  let out = [];
+  for(const chunk of chunks){
+    const res = await fetch(API_BASE, {
+      method: 'POST',
+      headers: {'Content-Type':'text/plain;charset=utf-8'}, // evita preflight CORS
+      body: JSON.stringify({table, action, records: chunk})
+    });
+    const json = await res.json();
+    if(json.error) throw new Error(table + ': ' + json.error);
+    out = out.concat(json.records||[]);
+  }
+  return out;
+}
+async function registrarMovimientoBanco(bancoKey, fecha, desc, valor){
+  if(!bancoKey || !bancos[bancoKey]) return;
+  try{
+    const recs = await atWrite('Banco mvtos','create',[{fields:{
+      Cuenta: bancoLabel(bancoKey), Fecha: fecha, Descripcion: desc, Tipo:'Pago', Valor: -Math.abs(valor)
+    }}]);
+    bancos[bancoKey].movimientos.push({_id:recs[0].id, fecha, desc, valor:-Math.abs(valor), tipo:'pago'});
+  }catch(err){ console.error('No se pudo registrar el movimiento de banco:', err); }
+}
+
+// ---- carga inicial desde Airtable ----
+async function cargarTodo(){
+  setStatus('Cargando datos de Airtable…', 'loading');
+  const [nomRecs, facRecs, antRecs, bcoRecs, cuentaRecs] = await Promise.all([
+    atList('Nomina'), atList('Pago proveedores'), atList('Anticipos mvtos'), atList('Banco mvtos'), atList('Banco cuentas')
+  ]);
+
+  nomina = nomRecs.map(r => ({
+    _id: r.id,
+    empleado: r.fields.Empleado || 'Sin nombre',
+    periodo: r.fields.Periodo || '',
+    periodoLabel: r.fields.Periodo_Label || r.fields.Periodo || '',
+    valor: r.fields.Valor || 0,
+    estado: (r.fields.Estado||'Pendiente').toLowerCase(),
+    banco: bancoKeyFromLabel(r.fields.Banco),
+    soporte: (r.fields.Soporte && r.fields.Soporte.length) ? r.fields.Soporte[0].filename : null
+  }));
+
+  facturas = facRecs.map(r => ({
+    _id: r.id,
+    fecha: r.fields.Fecha || '',
+    periodo: r.fields.Periodo || periodoDe(r.fields.Fecha||''),
+    ben: r.fields.Beneficiario || 'Sin nombre',
+    concepto: r.fields.Concepto || '—',
+    valor: r.fields.Valor || 0,
+    oc: r.fields.OC_OS || null,
+    banco: bancoKeyFromLabel(r.fields.Banco),
+    estado: (r.fields.Estado||'Pendiente').toLowerCase(),
+    factura: (r.fields.Factura_Estado||'Pendiente').toLowerCase()
+  }));
+
+  const grupos = {};
+  antRecs.forEach(r=>{
+    const nombre = r.fields.Contratista || 'Sin nombre';
+    if(!grupos[nombre]) grupos[nombre] = {contratista:nombre, nit:r.fields.NIT||'—', oficio:r.fields.Oficio||'', movs:[]};
+    grupos[nombre].movs.push({
+      _id: r.id, fecha: r.fields.Fecha||'', fechaLabel: fechaCorta(r.fields.Fecha),
+      tipo: r.fields.Tipo || 'Anticipo', doc: r.fields.Documento || '', valor: r.fields.Valor || 0
+    });
+  });
+  anticipos = Object.values(grupos).map(c=>{
+    c.movs.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+    const ultima = c.movs[c.movs.length-1];
+    c.diasUltimoMov = ultima ? diasDesde(ultima.fecha) : 0;
+    return c;
+  });
+
+  const saldosIniciales = {};
+  cuentaRecs.forEach(r=>{
+    const key = bancoKeyFromLabel(r.fields.Cuenta);
+    if(key) saldosIniciales[key] = r.fields.Saldo_Inicial || 0;
+  });
+  bancos = {
+    'CONSTRUCTHOR-8695': { saldoInicial: saldosIniciales['CONSTRUCTHOR-8695']||0, movimientos: [] },
+    'HABITAD-CAJA': { saldoInicial: saldosIniciales['HABITAD-CAJA']||0, movimientos: [] }
+  };
+  bcoRecs.forEach(r=>{
+    const key = bancoKeyFromLabel(r.fields.Cuenta);
+    if(!key || !bancos[key]) return;
+    bancos[key].movimientos.push({
+      _id: r.id, fecha: r.fields.Fecha||'', desc: r.fields.Descripcion||'',
+      valor: r.fields.Valor||0, tipo:(r.fields.Tipo||'Pago').toLowerCase()
+    });
+  });
+
+  setStatus('', '');
+  renderAll();
+}
+
+async function init(){
+  try{ await cargarTodo(); }
+  catch(err){ setStatus('No se pudo conectar con Airtable: '+err.message, 'error'); }
+}
+
+function setStatus(msg, kind){
+  const el = document.getElementById('statusBar');
+  el.textContent = msg;
+  el.className = kind || '';
+  if(!msg) el.style.display = 'none'; else el.style.display = 'block';
+}
+
+// ============================================================
+// Render (misma lógica ya validada en la maqueta)
+// ============================================================
+function onPeriodoChange(){ periodoActual = document.getElementById('periodoFiltro').value; renderAll(); }
+
+function renderKPIs(){
+  const nomF = nomina.filter(n=>pasaFiltro(n.periodo));
+  const facF = facturas.filter(f=>pasaFiltro(f.periodo));
+  const pagado = nomF.filter(n=>n.estado==="pagada").reduce((s,n)=>s+n.valor,0) + facF.filter(f=>f.estado==="pagada").reduce((s,f)=>s+f.valor,0);
+  const pendiente = nomF.filter(n=>n.estado==="pendiente").reduce((s,n)=>s+n.valor,0) + facF.filter(f=>f.estado==="pendiente").reduce((s,f)=>s+f.valor,0);
+  const anticiposPend = anticipos.reduce((s,c)=>s+saldoContratista(c),0);
+  document.getElementById('kpiPagado').textContent = money(pagado);
+  document.getElementById('kpiPendiente').textContent = money(pendiente);
+  document.getElementById('kpiAnticipos').textContent = money(anticiposPend);
+  const alertas = [];
+  anticipos.forEach(c=>{ if(c.diasUltimoMov>30) alertas.push({tipo:"Anticipo sin legalizar", quien:c.contratista, detalle:`Saldo ${money(saldoContratista(c))} pendiente de cruzar`, dias:c.diasUltimoMov}); });
+  facturas.forEach(f=>{ if(f.estado==="pagada" && f.factura==="pendiente") alertas.push({tipo:"Pagado sin factura", quien:f.ben, detalle:"Pagado por soporte, falta vincular factura/XML", dias:"—"}); });
+  document.getElementById('kpiAlertas').textContent = alertas.length;
+  document.getElementById('alertasBody').innerHTML = alertas.map(a=>`
+    <tr><td><span class="badge alerta"><span class="dot"></span>${a.tipo}</span></td><td>${a.quien}</td><td class="muted">${a.detalle}</td><td>${a.dias}</td></tr>
+  `).join('') || '<tr><td colspan="4" class="muted">Sin alertas por ahora.</td></tr>';
+}
+
+function renderNomina(){
+  const rows = nomina.filter(n=>pasaFiltro(n.periodo));
+  document.getElementById('nominaBody').innerHTML = (rows.map((n)=>{
+    const i = nomina.indexOf(n);
+    const accion = n.estado==="pendiente" ? `
+      <div class="row-actions">
+        <select class="mini" id="nBanco_${i}">
+          <option value="CONSTRUCTHOR-8695">Bancolombia 8695</option>
+          <option value="HABITAD-CAJA">Caja Social HABI+TAD</option>
+        </select>
+        <button class="action" onclick="marcarNomina(${i})">Marcar pagada</button>
+      </div>` : '<span class="muted">—</span>';
+    return `<tr>
+      <td>${n.empleado}</td>
+      <td class="muted">${n.periodoLabel}</td>
+      <td class="mono">${money(n.valor)}</td>
+      <td>${n.estado==="pagada" ? '<span class="badge pagada"><span class="dot"></span>Pagada</span>' : '<span class="badge pendiente"><span class="dot"></span>Pendiente</span>'}</td>
+      <td class="muted">${bancoLabel(n.banco)}</td>
+      <td class="muted">${n.soporte ? n.soporte : '—'}</td>
+      <td>${accion}</td>
+    </tr>`;
+  }).join('')) || '<tr><td colspan="7" class="muted">Sin registros en este período.</td></tr>';
+}
+async function marcarNomina(i){
+  const sel = document.getElementById('nBanco_'+i);
+  const banco = sel ? sel.value : 'CONSTRUCTHOR-8695';
+  const row = nomina[i];
+  try{
+    await atWrite('Nomina','update',[{id:row._id, fields:{Estado:'Pagada', Banco: bancoLabel(banco)}}]);
+    row.estado='pagada'; row.banco=banco;
+    await registrarMovimientoBanco(banco, hoyISO(), 'Nómina — '+row.empleado, row.valor);
+    renderAll();
+  }catch(err){ alert('No se pudo marcar como pagada: '+err.message); }
+}
+
+function renderFacturas(){
+  const rows = facturas.filter(f=>pasaFiltro(f.periodo));
+  document.getElementById('facturasBody').innerHTML = (rows.map((f)=>{
+    const i = facturas.indexOf(f);
+    const estadoCell = f.estado==="pagada" ? '<span class="badge pagada"><span class="dot"></span>Pagada</span>' : `
+      <div class="row-actions">
+        <span class="badge pendiente"><span class="dot"></span>Pendiente</span>
+        <select class="mini" id="fBanco_${i}">
+          <option value="CONSTRUCTHOR-8695">Bancolombia 8695</option>
+          <option value="HABITAD-CAJA">Caja Social HABI+TAD</option>
+        </select>
+        <button class="action" onclick="marcarFacturaPagada(${i})">Marcar pagada</button>
+      </div>`;
+    return `<tr>
+      <td class="muted">${f.fecha}</td>
+      <td>${f.ben}</td>
+      <td class="muted">${f.concepto}</td>
+      <td class="mono">${money(f.valor)}</td>
+      <td>${f.oc ? `<span class="badge neutro">${f.oc}</span>` : '<span class="muted">Sin OC</span>'}</td>
+      <td class="muted">${bancoLabel(f.banco)}</td>
+      <td>${estadoCell}</td>
+      <td class="row-actions">${f.factura==="vinculada" ? '<span class="badge pagada"><span class="dot"></span>Vinculada</span>' : `<button class="action" onclick="vincularFactura(${i})">Vincular factura</button>`}</td>
+    </tr>`;
+  }).join('')) || '<tr><td colspan="8" class="muted">Sin registros en este período.</td></tr>';
+}
+async function vincularFactura(i){
+  const row = facturas[i];
+  try{
+    await atWrite('Pago proveedores','update',[{id:row._id, fields:{Factura_Estado:'Vinculada'}}]);
+    row.factura='vinculada'; renderAll();
+  }catch(err){ alert('No se pudo vincular: '+err.message); }
+}
+async function marcarFacturaPagada(i){
+  const sel = document.getElementById('fBanco_'+i);
+  const banco = sel ? sel.value : 'CONSTRUCTHOR-8695';
+  const row = facturas[i];
+  try{
+    await atWrite('Pago proveedores','update',[{id:row._id, fields:{Estado:'Pagada', Banco: bancoLabel(banco)}}]);
+    row.estado='pagada'; row.banco=banco;
+    await registrarMovimientoBanco(banco, row.fecha, 'Pago — '+row.ben, row.valor);
+    renderAll();
+  }catch(err){ alert('No se pudo marcar como pagada: '+err.message); }
+}
+
+function renderAnticipos(){
+  document.getElementById('anticiposList').innerHTML = anticipos.map((c)=>{
+    const anticipado = totalAnticipado(c), legalizado = totalLegalizado(c), saldo = saldoContratista(c);
+    const alerta = c.diasUltimoMov>30;
+    const movsFiltrados = c.movs.filter(m=>pasaFiltro(periodoDe(m.fecha)));
+    const movs = movsFiltrados.map(m=>`
+      <tr><td class="muted">${m.fechaLabel}</td>
+      <td>${m.tipo==="Anticipo" ? '<span class="badge pendiente"><span class="dot"></span>Anticipo</span>' : '<span class="badge pagada"><span class="dot"></span>Legaliza</span>'}</td>
+      <td class="muted">${m.doc}</td><td class="mono">${money(m.valor)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Sin movimientos en este período.</td></tr>';
+    return `<details class="contratista"><summary>
+        <div class="sum-left"><span class="nombre">${c.contratista}</span><span class="nit">NIT ${c.nit} · ${c.oficio}</span></div>
+        <div class="sum-right">
+          <div class="stat"><div class="l">Anticipado (total)</div><div class="v">${money(anticipado)}</div></div>
+          <div class="stat"><div class="l">Legalizado (total)</div><div class="v">${money(legalizado)}</div></div>
+          <div class="stat"><div class="l">Saldo pendiente</div><div class="v" style="color:${saldo>0?'var(--amber-ink)':'var(--green-ink)'}">${money(saldo)}</div></div>
+          ${alerta ? '<span class="badge alerta"><span class="dot"></span>'+c.diasUltimoMov+' días</span>' : '<span class="badge neutro">al día</span>'}
+        </div></summary>
+        <div class="detail-body"><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Documento</th><th>Valor</th></tr></thead><tbody>${movs}</tbody></table></div></div>
+      </details>`;
+  }).join('') || '<p class="muted">Todavía no hay anticipos registrados.</p>';
+}
+
+function renderBanco(){
+  const key = document.getElementById('bancoSel').value;
+  const b = bancos[key];
+  const movs = [...b.movimientos].sort((a,c)=> a.fecha.localeCompare(c.fecha));
+  let saldo = b.saldoInicial;
+  const filas = movs.map(m=>{ saldo += m.valor; return {...m, saldoRun:saldo}; });
+  document.getElementById('bancoSaldoSistema').textContent = money(saldo);
+  const extractoEl = document.getElementById('bancoExtracto');
+  const extracto = extractoEl.value === '' ? null : Number(extractoEl.value);
+  const dif = document.getElementById('bancoDiferencia');
+  if(extracto===null){ dif.textContent = '—'; dif.style.color='var(--ink)'; }
+  else{
+    const d = saldo - extracto;
+    dif.textContent = money(d);
+    dif.style.color = Math.abs(d) <= 5000 ? 'var(--green-ink)' : 'var(--red-ink)';
+  }
+  document.getElementById('bancoBody').innerHTML = filas.slice().reverse().map(m=>`
+    <tr><td class="muted">${m.fecha}</td><td>${m.desc}</td>
+    <td>${m.tipo==="ajuste" ? '<span class="badge neutro">Ajuste</span>' : '<span class="badge pagada"><span class="dot"></span>Pago</span>'}</td>
+    <td class="mono">${money(m.valor)}</td><td class="mono">${money(m.saldoRun)}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="muted">Sin movimientos aún.</td></tr>';
+}
+async function agregarAjuste(){
+  const key = document.getElementById('bancoSel').value;
+  const fecha = document.getElementById('ajFecha').value || hoyISO();
+  const desc = document.getElementById('ajDesc').value.trim() || 'Ajuste de banco';
+  const valor = Number(document.getElementById('ajValor').value)||0;
+  if(!valor){ alert('Ingresa un valor distinto de cero.'); return; }
+  try{
+    const recs = await atWrite('Banco mvtos','create',[{fields:{Cuenta: bancoLabel(key), Fecha:fecha, Descripcion:desc, Tipo:'Ajuste', Valor:valor}}]);
+    bancos[key].movimientos.push({_id:recs[0].id, fecha, desc, valor, tipo:'ajuste'});
+    document.getElementById('ajDesc').value=''; document.getElementById('ajValor').value='';
+    renderBanco();
+  }catch(err){ alert('No se pudo agregar el ajuste: '+err.message); }
+}
+
+function renderAll(){ renderKPIs(); renderNomina(); renderFacturas(); renderAnticipos(); renderBanco(); }
+
+// ============================================================
+// Exportar a Excel real (.xlsx)
+// ============================================================
+function exportarExcel(filename, headers, rows){
+  const data = [headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Datos');
+  XLSX.writeFile(wb, filename);
+}
+function exportNomina(){
+  const rows = nomina.filter(n=>pasaFiltro(n.periodo)).map(n=>[n.empleado,n.periodoLabel,n.valor,n.estado,bancoLabel(n.banco),n.soporte||'']);
+  exportarExcel('nomina_san_antonio.xlsx', ['Empleado','Periodo','Valor','Estado','Banco','Soporte'], rows);
+}
+function exportFacturas(){
+  const rows = facturas.filter(f=>pasaFiltro(f.periodo)).map(f=>[f.fecha,f.ben,f.concepto,f.valor,f.oc||'',bancoLabel(f.banco),f.estado,f.factura]);
+  exportarExcel('facturas_pagos_san_antonio.xlsx', ['Fecha','Beneficiario','Concepto','Valor','OC/OS','Banco','Estado','Factura'], rows);
+}
+function exportAnticipos(){
+  const rows = [];
+  anticipos.forEach(c=> c.movs.filter(m=>pasaFiltro(periodoDe(m.fecha))).forEach(m=> rows.push([c.contratista, c.nit, m.fecha, m.tipo, m.doc, m.valor])));
+  exportarExcel('anticipos_san_antonio.xlsx', ['Contratista','NIT','Fecha','Tipo','Documento','Valor'], rows);
+}
+function exportBanco(){
+  const key = document.getElementById('bancoSel').value;
+  const b = bancos[key];
+  const movs = [...b.movimientos].sort((a,c)=> a.fecha.localeCompare(c.fecha));
+  let saldo = b.saldoInicial;
+  const rows = movs.map(m=>{ saldo += m.valor; return [m.fecha, m.desc, m.tipo, m.valor, saldo]; });
+  exportarExcel('banco_'+key.toLowerCase()+'.xlsx', ['Fecha','Descripción','Tipo','Valor','Saldo'], rows);
+}
+function descargarPlantilla(){
+  exportarExcel('plantilla_carga_pagos.xlsx', ['tipo(nomina/factura)','fecha','nombre','concepto','valor','oc','soporte(si/no)','banco(CONSTRUCTHOR-8695/HABITAD-CAJA)'], []);
+}
+
+// ============================================================
+// Cargar pagos: registro puntual y carga en bloque
+// ============================================================
+async function registrarPuntual(){
+  const btn = document.getElementById('btnRegistrarPuntual');
+  const fecha = document.getElementById('qFecha').value || hoyISO();
+  const ben = document.getElementById('qBen').value.trim();
+  const concepto = document.getElementById('qConcepto').value.trim();
+  const valor = Number(document.getElementById('qValor').value)||0;
+  const oc = document.getElementById('qOC').value.trim();
+  const banco = document.getElementById('qBanco').value;
+  const tieneSoporte = document.getElementById('qSoporte').checked;
+  if(!ben || !valor){ alert('Falta beneficiario o valor.'); return; }
+  btn.disabled = true;
+  try{
+    const fields = {
+      Fecha: fecha, Beneficiario: ben, Concepto: concepto||'—', Valor: valor,
+      OC_OS: oc||'', Estado: estadoAirtable(tieneSoporte?'pagada':'pendiente'),
+      Factura_Estado: 'Pendiente', Periodo: periodoDe(fecha)
+    };
+    if(tieneSoporte) fields.Banco = bancoLabel(banco);
+    const recs = await atWrite('Pago proveedores','create',[{fields}]);
+    facturas.unshift({_id:recs[0].id, fecha, periodo:periodoDe(fecha), ben, concepto:concepto||'—', valor, oc:oc||null,
+      estado: tieneSoporte?'pagada':'pendiente', factura:'pendiente', banco: tieneSoporte?banco:null});
+    if(tieneSoporte) await registrarMovimientoBanco(banco, fecha, 'Pago — '+ben, valor);
+    document.getElementById('qBen').value=''; document.getElementById('qConcepto').value='';
+    document.getElementById('qValor').value=''; document.getElementById('qOC').value='';
+    document.getElementById('qSoporte').checked=false;
+    const c = document.getElementById('qConfirm'); c.style.display='block'; setTimeout(()=>c.style.display='none', 3500);
+    renderAll();
+  }catch(err){ alert('No se pudo registrar: '+err.message); }
+  finally{ btn.disabled = false; }
+}
+
+async function agregarFilasBulk(lineas){
+  const periodoDefault = document.getElementById('bPeriodo').value;
+  const nominaNuevas = [], facturaNuevas = [];
+  lineas.forEach(l=>{
+    if(!l || !String(l).trim()) return;
+    const partes = String(l).split(',').map(s=>(s||'').trim());
+    const [tipoRaw,fecha,nombre,concepto,valorStr,oc,soporte,banco] = partes;
+    const tipo = (tipoRaw||'').toLowerCase();
+    if(!fecha || tipo==='tipo' || fecha.toLowerCase()==='fecha') return;
+    const tienesop = /^s/i.test(soporte||'');
+    const bancoUsado = banco || 'CONSTRUCTHOR-8695';
+    const valor = Number(valorStr)||0;
+    const nombreFinal = nombre || 'Sin nombre';
+    if(tipo==='nomina'){
+      const fields = {Empleado:nombreFinal, Periodo:periodoDe(fecha)||periodoDefault, Periodo_Label:fecha, Valor:valor,
+        Estado:estadoAirtable(tienesop?'pagada':'pendiente')};
+      if(tienesop) fields.Banco = bancoLabel(bancoUsado);
+      nominaNuevas.push({fields, local:{empleado:nombreFinal, periodo:periodoDe(fecha)||periodoDefault, periodoLabel:fecha,
+        valor, estado:tienesop?'pagada':'pendiente', soporte:null, banco:tienesop?bancoUsado:null},
+        banco: tienesop?bancoUsado:null, fecha, tipo:'nomina', valor, nombre: nombreFinal});
+    } else {
+      const fields = {Fecha:fecha, Beneficiario:nombreFinal, Concepto:concepto||'—', Valor:valor, OC_OS:oc||'',
+        Estado:estadoAirtable(tienesop?'pagada':'pendiente'), Factura_Estado:'Pendiente', Periodo: periodoDe(fecha)||periodoDefault};
+      if(tienesop) fields.Banco = bancoLabel(bancoUsado);
+      facturaNuevas.push({fields, local:{fecha, periodo:periodoDe(fecha)||periodoDefault, ben:nombreFinal, concepto:concepto||'—',
+        valor, oc:oc||null, estado:tienesop?'pagada':'pendiente', factura:'pendiente', banco:tienesop?bancoUsado:null},
+        banco: tienesop?bancoUsado:null, fecha, tipo:'factura', valor, nombre: nombreFinal});
+    }
+  });
+
+  let creadas = 0;
+  if(nominaNuevas.length){
+    const recs = await atWrite('Nomina','create', nominaNuevas.map(n=>({fields:n.fields})));
+    recs.forEach((r,idx)=> nomina.unshift({...nominaNuevas[idx].local, _id:r.id}));
+    creadas += recs.length;
+  }
+  if(facturaNuevas.length){
+    const recs = await atWrite('Pago proveedores','create', facturaNuevas.map(f=>({fields:f.fields})));
+    recs.forEach((r,idx)=> facturas.unshift({...facturaNuevas[idx].local, _id:r.id}));
+    creadas += recs.length;
+  }
+  const conSoporte = [...nominaNuevas, ...facturaNuevas].filter(x=>x.banco);
+  if(conSoporte.length){
+    const bancoRecs = await atWrite('Banco mvtos','create', conSoporte.map(x=>({fields:{
+      Cuenta: bancoLabel(x.banco), Fecha:x.fecha, Descripcion:(x.tipo==='nomina'?'Nómina — ':'Pago — ')+x.nombre, Tipo:'Pago', Valor:-Math.abs(x.valor)
+    }})));
+    bancoRecs.forEach((r,idx)=>{
+      const x = conSoporte[idx];
+      bancos[x.banco].movimientos.push({_id:r.id, fecha:x.fecha, desc:(x.tipo==='nomina'?'Nómina — ':'Pago — ')+x.nombre, valor:-Math.abs(x.valor), tipo:'pago'});
+    });
+  }
+  return creadas;
+}
+
+async function procesarBulk(){
+  const btn = document.getElementById('btnProcesarBulk');
+  btn.disabled = true;
+  try{
+    const n = await agregarFilasBulk(document.getElementById('bulkText').value.split('\n'));
+    const c = document.getElementById('bConfirm');
+    c.textContent = `${n} fila(s) agregadas.`; c.style.display='block'; setTimeout(()=>c.style.display='none', 4000);
+    document.getElementById('bulkText').value=''; renderAll();
+  }catch(err){ alert('Error al procesar: '+err.message); }
+  finally{ btn.disabled = false; }
+}
+function procesarArchivo(ev){
+  const file = ev.target.files[0]; if(!file) return;
+  const name = file.name.toLowerCase();
+  const confirmar = async (lineas) => {
+    try{
+      const n = await agregarFilasBulk(lineas);
+      const c = document.getElementById('bConfirm');
+      c.textContent = `${n} fila(s) importadas desde ${file.name}.`; c.style.display='block'; setTimeout(()=>c.style.display='none', 4000);
+      renderAll();
+    }catch(err){ alert('Error al importar: '+err.message); }
+  };
+  if(name.endsWith('.xlsx') || name.endsWith('.xls')){
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const filas = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
+      confirmar(filas.map(r=> r.join(',')));
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    const reader = new FileReader();
+    reader.onload = e=> confirmar(e.target.result.split('\n'));
+    reader.readAsText(file);
+  }
+  ev.target.value='';
+}
+
+// ============================================================
+// Pestañas
+// ============================================================
+document.querySelectorAll('nav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+    btn.classList.add('active'); document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+init();
+</script>
+</body>
+</html>
