@@ -503,6 +503,11 @@ function totalLegalizado(c){ return -c.movs.filter(m=>m.valor<0).reduce((s,m)=>s
 // ============================================================
 // Capa de datos: leer y escribir en Airtable a través del proxy
 // ============================================================
+function mensajeError_(err){
+  if(!err) return 'Error desconocido';
+  if(typeof err === 'string') return err;
+  return err.message || (err.error && err.error.message) || JSON.stringify(err);
+}
 async function atList(table){
   let all = [], offset = null;
   do{
@@ -510,7 +515,7 @@ async function atList(table){
     if(offset) url += '&offset=' + encodeURIComponent(offset);
     const res = await fetch(url);
     const json = await res.json();
-    if(json.error) throw new Error(table + ': ' + json.error);
+    if(json.error) throw new Error(table + ': ' + mensajeError_(json.error));
     all = all.concat(json.records||[]);
     offset = json.offset || null;
   } while(offset);
@@ -527,7 +532,7 @@ async function atWrite(table, action, records){
       body: JSON.stringify({table, action, records: chunk})
     });
     const json = await res.json();
-    if(json.error) throw new Error(table + ': ' + json.error);
+    if(json.error) throw new Error(table + ': ' + mensajeError_(json.error));
     out = out.concat(json.records||[]);
   }
   return out;
@@ -922,6 +927,11 @@ async function procesarBulk(){
 function procesarArchivo(ev){
   const file = ev.target.files[0]; if(!file) return;
   const name = file.name.toLowerCase();
+  if(!(name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv'))){
+    alert('Ese archivo no es un Excel/CSV de pagos (es un '+(file.type||'archivo no reconocido')+').\n\nEsta casilla es solo para la plantilla de carga masiva (columnas tipo, fecha, nombre, concepto, valor, oc, soporte, banco).\n\nSi lo que quieres es adjuntar el comprobante/soporte de un pago puntual, eso todavía se hace directamente en Airtable, abriendo el registro correspondiente y subiéndolo en el campo "Soporte".');
+    ev.target.value='';
+    return;
+  }
   const confirmar = async (lineas) => {
     try{
       const n = await agregarFilasBulk(lineas);
