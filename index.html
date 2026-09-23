@@ -267,6 +267,12 @@
         <thead><tr><th><input type="checkbox" id="nominaSelAll" onchange="toggleSeleccionarTodoNomina(this)" title="Seleccionar todas las pendientes visibles"></th><th>Empleado</th><th>Cédula</th><th>Grupo</th><th>Concepto</th><th>Período (causación)</th><th>Fecha de pago</th><th>Valor</th><th>Estado</th><th>Banco</th><th>Soporte</th><th>Acción</th></tr></thead>
         <tbody id="nominaBody"></tbody>
       </table></div>
+      <div class="reco" style="margin-top:12px;">
+        <div class="box"><div class="l">Total por pagar (CxP) en este período</div><div class="v" id="nominaTotalPorPagar" style="color:var(--amber-ink);">—</div></div>
+        <div class="box"><div class="l">Registros pendientes</div><div class="v" id="nominaCountPendiente">—</div></div>
+        <div class="box"><div class="l">Total ya pagado en este período</div><div class="v" id="nominaTotalPagado" style="color:var(--green-ink);">—</div></div>
+      </div>
+      <p class="lanesub" style="margin-top:-8px;">Estos totales respetan el período elegido arriba (o "Todos" si no filtras) — incluyen Salario, Liquidación y Seguridad social por igual.</p>
       <div class="lanehead" style="margin-top:16px;">Pago agrupado (varios registros, un solo movimiento de banco)</div>
       <p class="lanesub">Marca con el check las filas que en la vida real salieron en UNA sola transferencia (ej. seguridad social de todos los empleados de un mes, o cualquier grupo pagado junto). La app marca cada registro seleccionado como "Pagada", pero crea un único movimiento en Banco por el valor total — igual a como se pagó de verdad.</p>
       <div class="lanes">
@@ -716,6 +722,12 @@ function renderNomina(){
       <td>${accion}</td>
     </tr>`;
   }).join('')) || '<tr><td colspan="12" class="muted">Sin registros en este período.</td></tr>';
+  const pendientes = rows.filter(n=>n.estado==="pendiente");
+  const totalPorPagar = pendientes.reduce((s,n)=>s+n.valor,0);
+  const totalPagado = rows.filter(n=>n.estado==="pagada").reduce((s,n)=>s+n.valor,0);
+  document.getElementById('nominaTotalPorPagar').textContent = money(totalPorPagar);
+  document.getElementById('nominaCountPendiente').textContent = pendientes.length;
+  document.getElementById('nominaTotalPagado').textContent = money(totalPagado);
   actualizarResumenSeleccion();
 }
 async function marcarNomina(i){
@@ -767,8 +779,8 @@ async function marcarSeleccionadasAgrupado(){
   const desc = document.getElementById('gpDesc').value.trim() || ('Pago agrupado — '+idxs.length+' registros');
   const sumaCalculada = idxs.reduce((s,i)=> s + nomina[i].valor, 0);
   const valorRealInput = document.getElementById('gpValorReal').value;
-  const usaValorReal = valorRealInput !== '' && !isNaN(Number(valorRealInput)) && Number(valorRealInput) > 0;
-  const total = usaValorReal ? Number(valorRealInput) : sumaCalculada;
+  const usaValorReal = valorRealInput !== '' && !isNaN(Number(valorRealInput)) && Number(valorRealInput) !== 0;
+  const total = usaValorReal ? Math.abs(Number(valorRealInput)) : sumaCalculada;
   const avisoDif = usaValorReal && total !== sumaCalculada
     ? `\n\n(La suma de los registros da ${money(sumaCalculada)}; el movimiento de banco se registrará por el valor real que indicaste: ${money(total)}. La diferencia de ${money(total-sumaCalculada)} es normal por redondeos de la planilla y no se le atribuye a ningún empleado en particular.)`
     : '';
