@@ -548,13 +548,33 @@ function mensajeError_(err){
   if(typeof err === 'string') return err;
   return err.message || (err.error && err.error.message) || JSON.stringify(err);
 }
+// Google Apps Script a veces responde con una página HTML en vez de JSON
+// (arranque en frío del servicio, hiccup temporal). Reintentamos una vez
+// antes de mostrarle un error a la usuaria.
+async function fetchJsonConReintento(url, options, intentos){
+  intentos = intentos || 2;
+  let ultimoError;
+  for(let i=0;i<intentos;i++){
+    try{
+      const res = await fetch(url, options);
+      const texto = await res.text();
+      let json;
+      try{ json = JSON.parse(texto); }
+      catch(e){ throw new Error('El servidor de Google tardó en responder (no devolvió datos válidos). Intenta de nuevo en unos segundos.'); }
+      return json;
+    }catch(err){
+      ultimoError = err;
+      if(i < intentos-1) await new Promise(r=>setTimeout(r, 900));
+    }
+  }
+  throw ultimoError;
+}
 async function atList(table){
   let all = [], offset = null;
   do{
     let url = API_BASE + '?table=' + encodeURIComponent(table);
     if(offset) url += '&offset=' + encodeURIComponent(offset);
-    const res = await fetch(url);
-    const json = await res.json();
+    const json = await fetchJsonConReintento(url);
     if(json.error) throw new Error(table + ': ' + mensajeError_(json.error));
     all = all.concat(json.records||[]);
     offset = json.offset || null;
@@ -566,12 +586,11 @@ async function atWrite(table, action, records){
   for(let i=0;i<records.length;i+=10) chunks.push(records.slice(i,i+10));
   let out = [];
   for(const chunk of chunks){
-    const res = await fetch(API_BASE, {
+    const json = await fetchJsonConReintento(API_BASE, {
       method: 'POST',
       headers: {'Content-Type':'text/plain;charset=utf-8'}, // evita preflight CORS
       body: JSON.stringify({table, action, records: chunk})
     });
-    const json = await res.json();
     if(json.error) throw new Error(table + ': ' + mensajeError_(json.error));
     out = out.concat(json.records||[]);
   }
