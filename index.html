@@ -264,7 +264,7 @@
         <button class="action" onclick="exportNomina()">Exportar a Excel (.xlsx)</button>
       </div>
       <div class="tablewrap"><table>
-        <thead><tr><th>Empleado</th><th>Cédula</th><th>Grupo</th><th>Período</th><th>Valor</th><th>Estado</th><th>Banco</th><th>Soporte</th><th>Acción</th></tr></thead>
+        <thead><tr><th>Empleado</th><th>Cédula</th><th>Grupo</th><th>Período (causación)</th><th>Fecha de pago</th><th>Valor</th><th>Estado</th><th>Banco</th><th>Soporte</th><th>Acción</th></tr></thead>
         <tbody id="nominaBody"></tbody>
       </table></div>
     </div>
@@ -496,6 +496,12 @@ function diasDesde(fechaISO){
   return Math.floor((Date.now()-d.getTime())/86400000);
 }
 function estadoAirtable(x){ return x==='pagada' ? 'Pagada' : 'Pendiente'; }
+function periodoBonito(p){
+  if(!p) return '—';
+  const partes = p.split('-'); if(partes.length<2) return p;
+  const mes = MESES[parseInt(partes[1],10)-1] || '';
+  return (mes.charAt(0).toUpperCase()+mes.slice(1)) + ' ' + partes[0];
+}
 
 function saldoContratista(c){ return c.movs.reduce((s,m)=>s+m.valor,0); }
 function totalAnticipado(c){ return c.movs.filter(m=>m.valor>0).reduce((s,m)=>s+m.valor,0); }
@@ -565,7 +571,8 @@ async function cargarTodo(){
     valor: r.fields.Valor || 0,
     estado: (r.fields.Estado||'Pendiente').toLowerCase(),
     banco: bancoKeyFromLabel(r.fields.Banco),
-    soporte: (r.fields.Soporte && r.fields.Soporte.length) ? r.fields.Soporte[0].filename : null
+    soporte: (r.fields.Soporte && r.fields.Soporte.length) ? r.fields.Soporte[0].filename : null,
+    soporteUrl: (r.fields.Soporte && r.fields.Soporte.length) ? r.fields.Soporte[0].url : null
   }));
 
   facturas = facRecs.map(r => ({
@@ -578,7 +585,11 @@ async function cargarTodo(){
     oc: r.fields.OC_OS || null,
     banco: bancoKeyFromLabel(r.fields.Banco),
     estado: (r.fields.Estado||'Pendiente').toLowerCase(),
-    factura: (r.fields.Factura_Estado||'Pendiente').toLowerCase()
+    factura: (r.fields.Factura_Estado||'Pendiente').toLowerCase(),
+    soporte: (r.fields.Soporte && r.fields.Soporte.length) ? r.fields.Soporte[0].filename : null,
+    soporteUrl: (r.fields.Soporte && r.fields.Soporte.length) ? r.fields.Soporte[0].url : null,
+    facturaXml: (r.fields.Factura_XML && r.fields.Factura_XML.length) ? r.fields.Factura_XML[0].filename : null,
+    facturaXmlUrl: (r.fields.Factura_XML && r.fields.Factura_XML.length) ? r.fields.Factura_XML[0].url : null
   }));
 
   const grupos = {};
@@ -670,6 +681,7 @@ function renderNomina(){
       <td>${n.empleado}</td>
       <td class="muted">${n.cedula || '—'}</td>
       <td class="muted">${n.grupo ? `<span class="badge neutro">${n.grupo}</span>` : '—'}</td>
+      <td>${periodoBonito(n.periodo)}</td>
       <td class="muted">${n.periodoLabel}</td>
       <td class="mono">${money(n.valor)}</td>
       <td>${n.estado==="pagada" ? '<span class="badge pagada"><span class="dot"></span>Pagada</span>' : '<span class="badge pendiente"><span class="dot"></span>Pendiente</span>'}</td>
@@ -677,7 +689,7 @@ function renderNomina(){
       <td class="muted">${n.soporte ? n.soporte : '—'}</td>
       <td>${accion}</td>
     </tr>`;
-  }).join('')) || '<tr><td colspan="9" class="muted">Sin registros en este período.</td></tr>';
+  }).join('')) || '<tr><td colspan="10" class="muted">Sin registros en este período.</td></tr>';
 }
 async function marcarNomina(i){
   const sel = document.getElementById('nBanco_'+i);
@@ -806,8 +818,8 @@ function exportarExcel(filename, headers, rows){
   XLSX.writeFile(wb, filename);
 }
 function exportNomina(){
-  const rows = nomina.filter(n=>pasaFiltro(n.periodo)).map(n=>[n.empleado,n.cedula||'',n.grupo||'',n.periodoLabel,n.valor,n.estado,bancoLabel(n.banco),n.soporte||'']);
-  exportarExcel('nomina_san_antonio.xlsx', ['Empleado','Cedula','Grupo','Periodo','Valor','Estado','Banco','Soporte'], rows);
+  const rows = nomina.filter(n=>pasaFiltro(n.periodo)).map(n=>[n.empleado,n.cedula||'',n.grupo||'',n.periodo,periodoBonito(n.periodo),n.periodoLabel,n.valor,n.estado,bancoLabel(n.banco),n.soporte||'']);
+  exportarExcel('nomina_san_antonio.xlsx', ['Empleado','Cedula','Grupo','Periodo_causacion(AAAA-MM)','Periodo_causacion','Fecha_pago','Valor','Estado','Banco','Soporte'], rows);
 }
 function exportFacturas(){
   const rows = facturas.filter(f=>pasaFiltro(f.periodo)).map(f=>[f.fecha,f.ben,f.concepto,f.valor,f.oc||'',bancoLabel(f.banco),f.estado,f.factura]);
