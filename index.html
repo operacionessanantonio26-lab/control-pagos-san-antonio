@@ -739,6 +739,7 @@ function renderNomina(){
           <option value="HABITAD-CAJA">Caja Social HABI+TAD</option>
         </select>
         <button class="action" onclick="marcarNomina(${i})">Marcar pagada</button>
+        <button class="action ghost" onclick="trasladarSiguientePeriodo(${i})" title="No se pagó en su período de causación — la mueve al período siguiente como cuenta por pagar (CxP), sin marcarla como pagada">→ CxP sig. mes</button>
       </div>` : '<span class="muted">—</span>';
     const chk = n.estado==="pendiente" ? `<input type="checkbox" onchange="toggleNominaSel(${i}, this.checked, this)" ${nominaSeleccion.has(i)?'checked':''}>` : '';
     const filaSel = nominaSeleccion.has(i) ? ' class="row-selected"' : '';
@@ -780,6 +781,28 @@ async function marcarNomina(i){
     await registrarMovimientoBanco(banco, fecha, desc, row.valor);
     renderAll();
   }catch(err){ alert('No se pudo marcar como pagada: '+err.message); }
+}
+
+// ---- trasladar un pendiente al período siguiente (CxP), sin marcarlo pagado ----
+function siguientePeriodo(periodo){
+  if(!/^\d{4}-\d{2}$/.test(periodo||'')) return '';
+  let [y,m] = periodo.split('-').map(Number);
+  m += 1;
+  if(m>12){ m=1; y+=1; }
+  return y + '-' + String(m).padStart(2,'0');
+}
+async function trasladarSiguientePeriodo(i){
+  const row = nomina[i];
+  if(!row) return;
+  const sig = siguientePeriodo(row.periodo);
+  if(!sig){ alert('No se pudo calcular el período siguiente (el período de causación de este registro no tiene el formato AAAA-MM).'); return; }
+  const conceptoTxt = (row.concepto && row.concepto!=='Salario') ? row.concepto : 'Salario';
+  if(!confirm(`Vas a trasladar este pago pendiente de ${periodoBonito(row.periodo)} a ${periodoBonito(sig)}, como cuenta por pagar (CxP) del mes siguiente:\n${row.empleado} — ${conceptoTxt} — ${money(row.valor)}\n\nEsto NO lo marca como pagado — solo cambia el período en el que aparece pendiente. Cuando sí se pague, usa "Marcar pagada" como siempre y coloca ahí la fecha real.`)) return;
+  try{
+    await atWrite('Nomina','update',[{id:row._id, fields:{Periodo: sig}}]);
+    row.periodo = sig;
+    renderAll();
+  }catch(err){ alert('No se pudo trasladar el período: '+err.message); }
 }
 
 // ---- pago agrupado: varios registros de Nómina, un solo movimiento de banco ----
