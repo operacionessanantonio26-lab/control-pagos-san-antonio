@@ -35,8 +35,8 @@
     font-family:inherit; font-size:13.5px; padding:7px 10px; border:1px solid var(--line);
     border-radius:8px; background:#fff; color:var(--ink);
   }
-  select.mini, input.mini{padding:4px 6px; font-size:12px; border-radius:6px;}
-  input[type="date"].mini{width:112px;}
+  select.mini, input.mini{padding:3px 5px; font-size:11.5px; border-radius:6px;}
+  input[type="date"].mini{width:98px;}
   nav{display:flex; gap:4px; margin:18px 0 18px; border-bottom:1px solid var(--line); overflow-x:auto;}
   nav button{
     appearance:none; border:none; background:none; padding:10px 14px; font-size:14px;
@@ -62,8 +62,11 @@
   td{padding:6px 7px; border-bottom:1px solid var(--line); vertical-align:middle;}
   tr:last-child td{border-bottom:none;}
   .tablewrap{overflow-x:auto;}
-  .tablewrap.compact table{font-size:11.5px;}
-  .tablewrap.compact th, .tablewrap.compact td{padding:5px 6px;}
+  .tablewrap.compact table{font-size:11px;}
+  .tablewrap.compact th, .tablewrap.compact td{padding:4px 5px;}
+  .tablewrap.compact th{font-size:9.5px;}
+  tr.row-selected td{background:var(--amber-bg);}
+  tr.row-selected:hover td{background:var(--amber-bg);}
   .badge{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px;}
   .badge .dot{width:6px; height:6px; border-radius:50%;}
   .badge.pagada{background:var(--green-bg); color:var(--green-ink);}
@@ -76,7 +79,7 @@
   .muted{color:var(--ink-soft);}
   button.action{
     appearance:none; border:1px solid var(--accent); background:#fff; color:var(--accent);
-    font-size:11.5px; font-weight:600; padding:4px 8px; border-radius:7px; cursor:pointer; white-space:nowrap;
+    font-size:11px; font-weight:600; padding:3px 7px; border-radius:7px; cursor:pointer; white-space:nowrap;
   }
   button.action:hover{background:#eef3fb;}
   button.action.ghost{border-color:var(--line); color:var(--ink-soft);}
@@ -98,7 +101,7 @@
   .detail-body{padding:0 16px 16px;}
   .note{background:var(--slate-bg); border-radius:10px; padding:12px 14px; font-size:12.5px; color:var(--slate-ink); margin-top:6px;}
   .footer-note{font-size:12px; color:var(--ink-soft); margin-top:28px; line-height:1.6;}
-  .row-actions{display:flex; gap:4px; align-items:center; flex-wrap:wrap;}
+  .row-actions{display:flex; gap:3px; align-items:center; flex-wrap:wrap;}
   .lanes{display:grid; grid-template-columns:1fr; gap:16px;}
   @media(min-width:760px){ .lanes{grid-template-columns:1fr 1fr;} }
   .field{display:flex; flex-direction:column; gap:4px; margin-bottom:10px;}
@@ -267,7 +270,7 @@
         <button class="action" onclick="exportNomina()">Exportar a Excel (.xlsx)</button>
       </div>
       <div class="tablewrap compact"><table>
-        <thead><tr><th><input type="checkbox" id="nominaSelAll" onchange="toggleSeleccionarTodoNomina(this)" title="Seleccionar todas las pendientes visibles"></th><th>Empleado</th><th>Cédula</th><th>Grupo</th><th>Concepto</th><th>Período (causación)</th><th>Fecha de pago</th><th>Valor</th><th>Estado</th><th>Banco</th><th>Soporte</th><th>Acción</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="nominaSelAll" onchange="toggleSeleccionarTodoNomina(this)" title="Seleccionar todas las pendientes visibles"></th><th>Empleado</th><th>Cédula</th><th>Grupo</th><th>Concepto</th><th title="Período de causación">Período</th><th>F. pago</th><th>Valor</th><th>Estado</th><th>Banco</th><th>Soporte</th><th>Acción</th></tr></thead>
         <tbody id="nominaBody"></tbody>
       </table></div>
       <div class="reco" style="margin-top:12px;">
@@ -709,8 +712,9 @@ function renderNomina(){
         </select>
         <button class="action" onclick="marcarNomina(${i})">Marcar pagada</button>
       </div>` : '<span class="muted">—</span>';
-    const chk = n.estado==="pendiente" ? `<input type="checkbox" onchange="toggleNominaSel(${i}, this.checked)" ${nominaSeleccion.has(i)?'checked':''}>` : '';
-    return `<tr>
+    const chk = n.estado==="pendiente" ? `<input type="checkbox" onchange="toggleNominaSel(${i}, this.checked, this)" ${nominaSeleccion.has(i)?'checked':''}>` : '';
+    const filaSel = nominaSeleccion.has(i) ? ' class="row-selected"' : '';
+    return `<tr${filaSel}>
       <td>${chk}</td>
       <td>${n.empleado}</td>
       <td class="muted">${n.cedula || '—'}</td>
@@ -751,8 +755,10 @@ async function marcarNomina(i){
 }
 
 // ---- pago agrupado: varios registros de Nómina, un solo movimiento de banco ----
-function toggleNominaSel(i, checked){
+function toggleNominaSel(i, checked, checkboxEl){
   if(checked) nominaSeleccion.add(i); else nominaSeleccion.delete(i);
+  const fila = checkboxEl ? checkboxEl.closest('tr') : null;
+  if(fila) fila.classList.toggle('row-selected', checked);
   actualizarResumenSeleccion();
 }
 function toggleSeleccionarTodoNomina(checkbox){
