@@ -548,26 +548,35 @@ function mensajeError_(err){
   if(typeof err === 'string') return err;
   return err.message || (err.error && err.error.message) || JSON.stringify(err);
 }
-// Google Apps Script a veces responde con una página HTML en vez de JSON
-// (arranque en frío del servicio, hiccup temporal). Reintentamos una vez
-// antes de mostrarle un error a la usuaria.
+// Google Apps Script a veces responde con una página HTML en vez de JSON,
+// o con un error suelto tipo "Falta el parámetro table"
+// (arranque en frío del servicio, hiccup temporal). Reintentamos un par de
+// veces antes de rendirnos y mostrarle un error a la usuaria.
 async function fetchJsonConReintento(url, options, intentos){
-  intentos = intentos || 2;
-  let ultimoError;
+  intentos = intentos || 3;
+  let ultimoError, ultimoJson;
   for(let i=0;i<intentos;i++){
+    const esUltimoIntento = i === intentos-1;
     try{
       const res = await fetch(url, options);
       const texto = await res.text();
       let json;
       try{ json = JSON.parse(texto); }
       catch(e){ throw new Error('El servidor de Google tardó en responder (no devolvió datos válidos). Intenta de nuevo en unos segundos.'); }
+      if(json.error && !esUltimoIntento){
+        // puede ser un hiccup temporal del servicio — reintentamos antes de rendirnos
+        ultimoJson = json;
+        await new Promise(r=>setTimeout(r, 800));
+        continue;
+      }
       return json;
     }catch(err){
       ultimoError = err;
-      if(i < intentos-1) await new Promise(r=>setTimeout(r, 900));
+      if(!esUltimoIntento) await new Promise(r=>setTimeout(r, 800));
     }
   }
-  throw ultimoError;
+  if(ultimoError) throw ultimoError;
+  return ultimoJson;
 }
 async function atList(table){
   let all = [], offset = null;
