@@ -264,7 +264,7 @@
         <button class="action" onclick="exportNomina()">Exportar a Excel (.xlsx)</button>
       </div>
       <div class="tablewrap"><table>
-        <thead><tr><th>Empleado</th><th>Período</th><th>Valor</th><th>Estado</th><th>Banco</th><th>Soporte</th><th>Acción</th></tr></thead>
+        <thead><tr><th>Empleado</th><th>Cédula</th><th>Grupo</th><th>Período</th><th>Valor</th><th>Estado</th><th>Banco</th><th>Soporte</th><th>Acción</th></tr></thead>
         <tbody id="nominaBody"></tbody>
       </table></div>
     </div>
@@ -374,8 +374,9 @@
               <option value="2026-10">Octubre 2026</option>
             </select>
           </div>
-          <textarea class="bulk" id="bulkText" placeholder="factura,2026-09-15,Transportes Boyacá,Transporte materiales,1850000,,no,CONSTRUCTHOR-8695
-nomina,2026-09-15,Yesenia Camargo,,780000,,si,HABITAD-CAJA"></textarea>
+          <textarea class="bulk" id="bulkText" placeholder="factura,2026-09-15,Transportes Boyacá,Transporte materiales,1850000,,no,CONSTRUCTHOR-8695,,,
+nomina,2026-07-01,Yesenia Camargo,,780000,,si,HABITAD-CAJA,,,2026-06"></textarea>
+          <p class="lanesub" style="margin-top:6px;">Columnas: tipo,fecha(pago),nombre,concepto,valor,oc,soporte(si/no),banco,cedula,grupo,período contable (opcional — solo si es distinto al mes de la fecha de pago, ej. nómina causada en junio y pagada en julio: pon 2026-06 aquí).</p>
           <div class="btnrow">
             <button class="primary" onclick="procesarBulk()" id="btnProcesarBulk">Procesar filas pegadas</button>
             <button class="action ghost" onclick="descargarPlantilla()">Descargar plantilla Excel</button>
@@ -557,6 +558,8 @@ async function cargarTodo(){
   nomina = nomRecs.map(r => ({
     _id: r.id,
     empleado: r.fields.Empleado || 'Sin nombre',
+    cedula: r.fields.Cedula || '',
+    grupo: r.fields.Grupo || '',
     periodo: r.fields.Periodo || '',
     periodoLabel: r.fields.Periodo_Label || r.fields.Periodo || '',
     valor: r.fields.Valor || 0,
@@ -665,6 +668,8 @@ function renderNomina(){
       </div>` : '<span class="muted">—</span>';
     return `<tr>
       <td>${n.empleado}</td>
+      <td class="muted">${n.cedula || '—'}</td>
+      <td class="muted">${n.grupo ? `<span class="badge neutro">${n.grupo}</span>` : '—'}</td>
       <td class="muted">${n.periodoLabel}</td>
       <td class="mono">${money(n.valor)}</td>
       <td>${n.estado==="pagada" ? '<span class="badge pagada"><span class="dot"></span>Pagada</span>' : '<span class="badge pendiente"><span class="dot"></span>Pendiente</span>'}</td>
@@ -672,7 +677,7 @@ function renderNomina(){
       <td class="muted">${n.soporte ? n.soporte : '—'}</td>
       <td>${accion}</td>
     </tr>`;
-  }).join('')) || '<tr><td colspan="7" class="muted">Sin registros en este período.</td></tr>';
+  }).join('')) || '<tr><td colspan="9" class="muted">Sin registros en este período.</td></tr>';
 }
 async function marcarNomina(i){
   const sel = document.getElementById('nBanco_'+i);
@@ -801,8 +806,8 @@ function exportarExcel(filename, headers, rows){
   XLSX.writeFile(wb, filename);
 }
 function exportNomina(){
-  const rows = nomina.filter(n=>pasaFiltro(n.periodo)).map(n=>[n.empleado,n.periodoLabel,n.valor,n.estado,bancoLabel(n.banco),n.soporte||'']);
-  exportarExcel('nomina_san_antonio.xlsx', ['Empleado','Periodo','Valor','Estado','Banco','Soporte'], rows);
+  const rows = nomina.filter(n=>pasaFiltro(n.periodo)).map(n=>[n.empleado,n.cedula||'',n.grupo||'',n.periodoLabel,n.valor,n.estado,bancoLabel(n.banco),n.soporte||'']);
+  exportarExcel('nomina_san_antonio.xlsx', ['Empleado','Cedula','Grupo','Periodo','Valor','Estado','Banco','Soporte'], rows);
 }
 function exportFacturas(){
   const rows = facturas.filter(f=>pasaFiltro(f.periodo)).map(f=>[f.fecha,f.ben,f.concepto,f.valor,f.oc||'',bancoLabel(f.banco),f.estado,f.factura]);
@@ -822,7 +827,7 @@ function exportBanco(){
   exportarExcel('banco_'+key.toLowerCase()+'.xlsx', ['Fecha','Descripción','Tipo','Valor','Saldo'], rows);
 }
 function descargarPlantilla(){
-  exportarExcel('plantilla_carga_pagos.xlsx', ['tipo(nomina/factura)','fecha','nombre','concepto','valor','oc','soporte(si/no)','banco(CONSTRUCTHOR-8695/HABITAD-CAJA)'], []);
+  exportarExcel('plantilla_carga_pagos.xlsx', ['tipo(nomina/factura)','fecha_pago','nombre','concepto','valor','oc','soporte(si/no)','banco(CONSTRUCTHOR-8695/HABITAD-CAJA)','cedula(solo nomina)','grupo(solo nomina)','periodo_contable(opcional, ej 2026-06, solo si es distinto al mes de fecha_pago)'], []);
 }
 
 // ============================================================
@@ -865,25 +870,30 @@ async function agregarFilasBulk(lineas){
   lineas.forEach(l=>{
     if(!l || !String(l).trim()) return;
     const partes = String(l).split(',').map(s=>(s||'').trim());
-    const [tipoRaw,fecha,nombre,concepto,valorStr,oc,soporte,banco] = partes;
+    const [tipoRaw,fecha,nombre,concepto,valorStr,oc,soporte,banco,cedula,grupo,periodoManual] = partes;
     const tipo = (tipoRaw||'').toLowerCase();
-    if(!fecha || tipo==='tipo' || fecha.toLowerCase()==='fecha') return;
+    if(!fecha || tipo.indexOf('tipo')===0 || fecha.toLowerCase().indexOf('fecha')===0) return;
     const tienesop = /^s/i.test(soporte||'');
     const bancoUsado = banco || 'CONSTRUCTHOR-8695';
     const valor = Number(valorStr)||0;
     const nombreFinal = nombre || 'Sin nombre';
+    // El período contable manda si se indica (útil cuando la fecha de PAGO cae en un mes distinto
+    // al mes en que se causó el gasto, por ejemplo nómina causada en junio y pagada en julio).
+    const periodoFinal = (periodoManual && periodoManual.trim()) || periodoDe(fecha) || periodoDefault;
     if(tipo==='nomina'){
-      const fields = {Empleado:nombreFinal, Periodo:periodoDe(fecha)||periodoDefault, Periodo_Label:fecha, Valor:valor,
+      const fields = {Empleado:nombreFinal, Periodo:periodoFinal, Periodo_Label:fecha, Valor:valor,
         Estado:estadoAirtable(tienesop?'pagada':'pendiente')};
       if(tienesop) fields.Banco = bancoLabel(bancoUsado);
-      nominaNuevas.push({fields, local:{empleado:nombreFinal, periodo:periodoDe(fecha)||periodoDefault, periodoLabel:fecha,
+      if(cedula) fields.Cedula = cedula;
+      if(grupo) fields.Grupo = grupo;
+      nominaNuevas.push({fields, local:{empleado:nombreFinal, cedula:cedula||'', grupo:grupo||'', periodo:periodoFinal, periodoLabel:fecha,
         valor, estado:tienesop?'pagada':'pendiente', soporte:null, banco:tienesop?bancoUsado:null},
         banco: tienesop?bancoUsado:null, fecha, tipo:'nomina', valor, nombre: nombreFinal});
     } else {
       const fields = {Fecha:fecha, Beneficiario:nombreFinal, Concepto:concepto||'—', Valor:valor, OC_OS:oc||'',
-        Estado:estadoAirtable(tienesop?'pagada':'pendiente'), Factura_Estado:'Pendiente', Periodo: periodoDe(fecha)||periodoDefault};
+        Estado:estadoAirtable(tienesop?'pagada':'pendiente'), Factura_Estado:'Pendiente', Periodo: periodoFinal};
       if(tienesop) fields.Banco = bancoLabel(bancoUsado);
-      facturaNuevas.push({fields, local:{fecha, periodo:periodoDe(fecha)||periodoDefault, ben:nombreFinal, concepto:concepto||'—',
+      facturaNuevas.push({fields, local:{fecha, periodo:periodoFinal, ben:nombreFinal, concepto:concepto||'—',
         valor, oc:oc||null, estado:tienesop?'pagada':'pendiente', factura:'pendiente', banco:tienesop?bancoUsado:null},
         banco: tienesop?bancoUsado:null, fecha, tipo:'factura', valor, nombre: nombreFinal});
     }
