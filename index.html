@@ -692,6 +692,7 @@ function renderNomina(){
     const i = nomina.indexOf(n);
     const accion = n.estado==="pendiente" ? `
       <div class="row-actions">
+        <input type="date" class="mini" id="nFecha_${i}" value="${hoyISO()}" title="Fecha real en que salió del banco">
         <select class="mini" id="nBanco_${i}">
           <option value="CONSTRUCTHOR-8695">Bancolombia 8695</option>
           <option value="HABITAD-CAJA">Caja Social HABI+TAD</option>
@@ -719,11 +720,16 @@ function renderNomina(){
 async function marcarNomina(i){
   const sel = document.getElementById('nBanco_'+i);
   const banco = sel ? sel.value : 'CONSTRUCTHOR-8695';
+  const fechaSel = document.getElementById('nFecha_'+i);
+  const fecha = (fechaSel && fechaSel.value) ? fechaSel.value : hoyISO();
   const row = nomina[i];
+  const conceptoTxt = (row.concepto && row.concepto!=='Salario') ? row.concepto : 'Salario';
+  if(!confirm(`Vas a marcar como Pagada:\n${row.empleado} — ${conceptoTxt} — ${money(row.valor)}\n\n¿Este pago SÍ salió ya del banco?`)) return;
+  const desc = conceptoTxt==='Salario' ? ('Nómina — '+row.empleado) : (conceptoTxt+' — '+row.empleado);
   try{
     await atWrite('Nomina','update',[{id:row._id, fields:{Estado:'Pagada', Banco: bancoLabel(banco)}}]);
     row.estado='pagada'; row.banco=banco;
-    await registrarMovimientoBanco(banco, hoyISO(), 'Nómina — '+row.empleado, row.valor);
+    await registrarMovimientoBanco(banco, fecha, desc, row.valor);
     renderAll();
   }catch(err){ alert('No se pudo marcar como pagada: '+err.message); }
 }
