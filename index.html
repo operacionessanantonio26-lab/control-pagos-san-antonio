@@ -281,7 +281,8 @@
               <option value="HABITAD-CAJA">Caja Social · HABI+TAD</option>
             </select>
           </div>
-          <div class="field"><label>Seleccionadas</label><div class="mono" id="gpResumen" style="padding-top:6px;">0 registros · $0</div></div>
+          <div class="field"><label>Seleccionadas (suma calculada)</label><div class="mono" id="gpResumen" style="padding-top:6px;">0 registros · $0</div></div>
+          <div class="field"><label>Valor real pagado (opcional — llénalo si difiere de la suma, ej. redondeos de la planilla PILA)</label><input type="number" id="gpValorReal" placeholder="Déjalo vacío para usar la suma calculada"></div>
           <div class="btnrow"><button class="primary" onclick="marcarSeleccionadasAgrupado()" id="btnGrupo" disabled>Marcar seleccionadas como pagadas (1 solo movimiento)</button></div>
         </div>
       </div>
@@ -764,8 +765,14 @@ async function marcarSeleccionadasAgrupado(){
   const banco = document.getElementById('gpBanco').value;
   const fecha = document.getElementById('gpFecha').value || hoyISO();
   const desc = document.getElementById('gpDesc').value.trim() || ('Pago agrupado — '+idxs.length+' registros');
-  const total = idxs.reduce((s,i)=> s + nomina[i].valor, 0);
-  if(!confirm(`Vas a marcar ${idxs.length} registro(s) como Pagada y crear UN SOLO movimiento de banco por ${money(total)}. ¿Coincide con lo que realmente salió del banco?`)) return;
+  const sumaCalculada = idxs.reduce((s,i)=> s + nomina[i].valor, 0);
+  const valorRealInput = document.getElementById('gpValorReal').value;
+  const usaValorReal = valorRealInput !== '' && !isNaN(Number(valorRealInput)) && Number(valorRealInput) > 0;
+  const total = usaValorReal ? Number(valorRealInput) : sumaCalculada;
+  const avisoDif = usaValorReal && total !== sumaCalculada
+    ? `\n\n(La suma de los registros da ${money(sumaCalculada)}; el movimiento de banco se registrará por el valor real que indicaste: ${money(total)}. La diferencia de ${money(total-sumaCalculada)} es normal por redondeos de la planilla y no se le atribuye a ningún empleado en particular.)`
+    : '';
+  if(!confirm(`Vas a marcar ${idxs.length} registro(s) como Pagada y crear UN SOLO movimiento de banco por ${money(total)}.${avisoDif}\n\n¿Coincide con lo que realmente salió del banco?`)) return;
   const btn = document.getElementById('btnGrupo');
   if(btn){ btn.disabled = true; btn.textContent = 'Guardando...'; }
   try{
@@ -778,6 +785,7 @@ async function marcarSeleccionadasAgrupado(){
     bancos[banco].movimientos.push({_id:recs[0].id, fecha, desc, valor:-Math.abs(total), tipo:'pago'});
     nominaSeleccion.clear();
     document.getElementById('gpDesc').value='';
+    document.getElementById('gpValorReal').value='';
     renderAll();
   }catch(err){
     alert('No se pudo registrar el pago agrupado: '+err.message);
