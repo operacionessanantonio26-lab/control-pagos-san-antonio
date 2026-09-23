@@ -741,8 +741,8 @@ function renderNomina(){
         <button class="action" onclick="marcarNomina(${i})">Marcar pagada</button>
         <button class="action ghost" onclick="trasladarSiguientePeriodo(${i})" title="No se pagó en su período de causación — la mueve al período siguiente como cuenta por pagar (CxP), sin marcarla como pagada">→ CxP sig. mes</button>
       </div>` : '<span class="muted">—</span>';
-    const chk = n.estado==="pendiente" ? `<input type="checkbox" onchange="toggleNominaSel(${i}, this.checked, this)" ${nominaSeleccion.has(i)?'checked':''}>` : '';
-    const filaSel = nominaSeleccion.has(i) ? ' class="row-selected"' : '';
+    const chk = n.estado==="pendiente" ? `<input type="checkbox" onchange="toggleNominaSel('${n._id}', this.checked, this)" ${nominaSeleccion.has(n._id)?'checked':''}>` : '';
+    const filaSel = nominaSeleccion.has(n._id) ? ' class="row-selected"' : '';
     return `<tr${filaSel}>
       <td>${chk}</td>
       <td>${n.empleado}</td>
@@ -806,8 +806,13 @@ async function trasladarSiguientePeriodo(i){
 }
 
 // ---- pago agrupado: varios registros de Nómina, un solo movimiento de banco ----
-function toggleNominaSel(i, checked, checkboxEl){
-  if(checked) nominaSeleccion.add(i); else nominaSeleccion.delete(i);
+// OJO: nominaSeleccion guarda el ID del registro (n._id), NO la posición en el arreglo.
+// La posición cambia cuando se sube un archivo masivo (los nuevos se agregan al inicio)
+// o cuando se recargan los datos, así que un Set de posiciones se podía "desincronizar"
+// del check real. Con el ID esto ya no pasa.
+function nominaPorId(id){ return nomina.find(n=>n._id===id); }
+function toggleNominaSel(id, checked, checkboxEl){
+  if(checked) nominaSeleccion.add(id); else nominaSeleccion.delete(id);
   const fila = checkboxEl ? checkboxEl.closest('tr') : null;
   if(fila) fila.classList.toggle('row-selected', checked);
   actualizarResumenSeleccion();
@@ -815,42 +820,48 @@ function toggleNominaSel(i, checked, checkboxEl){
 function toggleSeleccionarTodoNomina(checkbox){
   const rows = nomina.filter(n=>pasaFiltro(n.periodo));
   rows.forEach((n)=>{
-    const i = nomina.indexOf(n);
     if(n.estado==='pendiente'){
-      if(checkbox.checked) nominaSeleccion.add(i); else nominaSeleccion.delete(i);
+      if(checkbox.checked) nominaSeleccion.add(n._id); else nominaSeleccion.delete(n._id);
     }
   });
   renderNomina();
+}
+function seleccionActual(){
+  return [...nominaSeleccion].map(nominaPorId).filter(n=> n && n.estado==='pendiente');
 }
 function actualizarResumenSeleccion(){
   const el = document.getElementById('gpResumen');
   const btn = document.getElementById('btnGrupo');
   if(!el || !btn) return;
-  const idxs = [...nominaSeleccion].filter(i=> nomina[i] && nomina[i].estado==='pendiente');
-  const total = idxs.reduce((s,i)=> s + (nomina[i] ? nomina[i].valor : 0), 0);
-  el.textContent = idxs.length + (idxs.length===1 ? ' registro · ' : ' registros · ') + money(total);
-  btn.disabled = idxs.length===0;
+  const seleccionados = seleccionActual();
+  const total = seleccionados.reduce((s,n)=> s + n.valor, 0);
+  el.textContent = seleccionados.length + (seleccionados.length===1 ? ' registro · ' : ' registros · ') + money(total);
+  btn.disabled = seleccionados.length===0;
 }
 async function marcarSeleccionadasAgrupado(){
-  const idxs = [...nominaSeleccion].filter(i=> nomina[i] && nomina[i].estado==='pendiente');
-  if(idxs.length===0){ alert('Selecciona al menos un registro pendiente con el check.'); return; }
+  const seleccionados = seleccionActual();
+  if(seleccionados.length===0){ alert('Selecciona al menos un registro pendiente con el check.'); return; }
   const banco = document.getElementById('gpBanco').value;
   const fecha = document.getElementById('gpFecha').value || hoyISO();
-  const desc = document.getElementById('gpDesc').value.trim() || ('Pago agrupado — '+idxs.length+' registros');
-  const sumaCalculada = idxs.reduce((s,i)=> s + nomina[i].valor, 0);
+  const desc = document.getElementById('gpDesc').value.trim() || ('Pago agrupado — '+seleccionados.length+' registros');
+  const sumaCalculada = seleccionados.reduce((s,n)=> s + n.valor, 0);
   const valorRealInput = document.getElementById('gpValorReal').value;
   const usaValorReal = valorRealInput !== '' && !isNaN(Number(valorRealInput)) && Number(valorRealInput) !== 0;
   const total = usaValorReal ? Math.abs(Number(valorRealInput)) : sumaCalculada;
   const avisoDif = usaValorReal && total !== sumaCalculada
     ? `\n\n(La suma de los registros da ${money(sumaCalculada)}; el movimiento de banco se registrará por el valor real que indicaste: ${money(total)}. La diferencia de ${money(total-sumaCalculada)} es normal por redondeos de la planilla y no se le atribuye a ningún empleado en particular.)`
     : '';
-  if(!confirm(`Vas a marcar ${idxs.length} registro(s) como Pagada y crear UN SOLO movimiento de banco por ${money(total)}.${avisoDif}\n\n¿Coincide con lo que realmente salió del banco?`)) return;
+  const detalle = seleccionados.map(n=>{
+    const c = (n.concepto && n.concepto!=='Salario') ? n.concepto : 'Salario';
+    return `- ${n.empleado} — ${c} — ${money(n.valor)}`;
+  }).join('\n');
+  if(!confirm(`Vas a marcar estos ${seleccionados.length} registro(s) como Pagada y crear UN SOLO movimiento de banco por ${money(total)}:\n\n${detalle}${avisoDif}\n\n¿Es exactamente esto lo que salió del banco?`)) return;
   const btn = document.getElementById('btnGrupo');
   if(btn){ btn.disabled = true; btn.textContent = 'Guardando...'; }
   try{
-    const updates = idxs.map(i => ({id: nomina[i]._id, fields:{Estado:'Pagada', Banco: bancoLabel(banco)}}));
+    const updates = seleccionados.map(n => ({id: n._id, fields:{Estado:'Pagada', Banco: bancoLabel(banco)}}));
     await atWrite('Nomina','update',updates);
-    idxs.forEach(i=>{ nomina[i].estado='pagada'; nomina[i].banco=banco; });
+    seleccionados.forEach(n=>{ n.estado='pagada'; n.banco=banco; });
     const recs = await atWrite('Banco mvtos','create',[{fields:{
       Cuenta: bancoLabel(banco), Fecha: fecha, Descripcion: desc, Tipo:'Pago', Valor: -Math.abs(total)
     }}]);
