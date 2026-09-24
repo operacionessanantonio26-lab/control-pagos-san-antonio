@@ -1014,7 +1014,7 @@ function exportBanco(){
   exportarExcel('banco_'+key.toLowerCase()+'.xlsx', ['Fecha','Descripción','Tipo','Valor','Saldo'], rows);
 }
 function descargarPlantilla(){
-  exportarExcel('plantilla_carga_pagos.xlsx', ['tipo(nomina/factura)','fecha_pago','nombre','concepto(en nomina: Salario/Liquidacion/Seguridad social, vacio=Salario)','valor','oc','soporte(si/no)','banco(CONSTRUCTHOR-8695/HABITAD-CAJA)','cedula(solo nomina)','grupo(solo nomina)','periodo_contable(opcional, ej 2026-06, solo si es distinto al mes de fecha_pago)'], []);
+  exportarExcel('plantilla_carga_pagos.xlsx', ['tipo(nomina/factura)','fecha_pago','nombre','concepto(en nomina: Salario/Liquidacion/Seguridad social, vacio=Salario)','valor','oc','soporte(si/no)','banco(CONSTRUCTHOR-8695/HABITAD-CAJA)','cedula(solo nomina)','grupo(solo nomina)','periodo_contable(obligatorio en Liquidacion — ej 2026-06, el mes en que se causó, casi siempre distinto a fecha_pago; opcional en Salario/Seguridad social si coincide con fecha_pago)'], []);
 }
 
 // ============================================================
@@ -1051,9 +1051,34 @@ async function registrarPuntual(){
   finally{ btn.disabled = false; }
 }
 
+function normalizaTexto_(s){ return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
+
 async function agregarFilasBulk(lineas){
   const periodoDefault = document.getElementById('bPeriodo').value;
   const nominaNuevas = [], facturaNuevas = [];
+
+  // Validación previa: una Liquidación casi siempre se causa en un mes y se paga en otro
+  // (se genera al momento del retiro, pero el pago puede salir semanas o meses después). Si se
+  // deja vacío periodo_contable, la app terminaría poniendo el mes de PAGO como si fuera el de
+  // causación — ese fue justo el error que dejó períodos incorrectos en Nómina. Por eso, para
+  // Liquidación, periodo_contable ya no es opcional: se exige antes de crear nada.
+  const faltantes = [];
+  lineas.forEach((l, idx)=>{
+    if(!l || !String(l).trim()) return;
+    const partes = String(l).split(',').map(s=>(s||'').trim());
+    const [tipoRaw,fecha,nombre,concepto,,,,,,,periodoManual] = partes;
+    const tipo = (tipoRaw||'').toLowerCase();
+    if(!fecha || tipo.indexOf('tipo')===0 || fecha.toLowerCase().indexOf('fecha')===0) return;
+    if(tipo==='nomina' && normalizaTexto_(concepto)==='liquidacion' && !(periodoManual && periodoManual.trim())){
+      faltantes.push(`Fila ${idx+1}: ${nombre || '(sin nombre)'}`);
+    }
+  });
+  if(faltantes.length){
+    throw new Error('Estas filas de Liquidación no traen período de causación (columna periodo_contable) y ahora es obligatorio indicarlo, porque casi siempre es distinto al mes de pago:\n\n'
+      + faltantes.join('\n')
+      + '\n\nAgrega el mes en que realmente se causó cada liquidación (ej. 2026-07) en esa columna y vuelve a intentar. No se creó ningún registro todavía.');
+  }
+
   lineas.forEach(l=>{
     if(!l || !String(l).trim()) return;
     const partes = String(l).split(',').map(s=>(s||'').trim());
