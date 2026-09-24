@@ -242,6 +242,7 @@
     <button data-tab="nomina">Nómina</button>
     <button data-tab="facturas">Facturas y pagos</button>
     <button data-tab="anticipos">Anticipos</button>
+    <button data-tab="ingresos">Ingresos</button>
     <button data-tab="banco">Banco</button>
     <button data-tab="cargar">Cargar pagos</button>
   </nav>
@@ -251,6 +252,8 @@
       <div class="kpi"><div class="label">Pagado en el período</div><div class="value" id="kpiPagado">—</div></div>
       <div class="kpi"><div class="label">Pendiente de pago</div><div class="value amber" id="kpiPendiente">—</div></div>
       <div class="kpi"><div class="label">Anticipos sin legalizar</div><div class="value amber" id="kpiAnticipos">—</div></div>
+      <div class="kpi"><div class="label">Ingresos recibidos (total)</div><div class="value" id="kpiIngresosRecibidos">—</div></div>
+      <div class="kpi"><div class="label">Ingresos por cobrar</div><div class="value amber" id="kpiIngresosPendientes">—</div></div>
       <div class="kpi"><div class="label">Alertas activas</div><div class="value red" id="kpiAlertas">—</div></div>
     </div>
     <div class="card">
@@ -321,6 +324,53 @@
         <button class="action" onclick="exportAnticipos()">Exportar a Excel (.xlsx)</button>
       </div>
       <div id="anticiposList"></div>
+    </div>
+  </section>
+
+  <section id="ingresos">
+    <div class="card">
+      <div class="card-head">
+        <div><h2>Ingresos del proyecto (anticipo y facturas de venta)</h2><p class="hint">El Anticipo entra directo, sin retenciones. En Factura, digitas Valor bruto e IVA y la app calcula las retenciones con los porcentajes del contrato (puedes editarlas antes de registrar, por ejemplo en la última factura, cuando el anticipo ya esté amortizado). Al marcar "Recibido" se crea el movimiento de Ingreso en el banco elegido.</p></div>
+        <button class="action" onclick="exportIngresos()">Exportar a Excel (.xlsx)</button>
+      </div>
+
+      <div class="lanehead">Registrar nuevo ingreso</div>
+      <div class="lanes">
+        <div>
+          <div class="field"><label>Tipo</label>
+            <select id="ingTipo" onchange="onIngTipoChange()">
+              <option value="Anticipo">Anticipo</option>
+              <option value="Factura">Factura</option>
+            </select>
+          </div>
+          <div class="field" id="ingNumFacturaWrap" style="display:none;"><label>N° Factura</label><input type="text" id="ingNumFactura" placeholder="Ej. FE2700"></div>
+          <div class="field"><label>Fecha</label><input type="date" id="ingFecha"></div>
+          <div class="field"><label>Link factura</label><input type="text" id="ingLinkFactura" placeholder="Link al documento (Drive, etc.)"></div>
+          <div class="field"><label>Link corte de obra aprobado</label><input type="text" id="ingLinkCorte" placeholder="Link al corte aprobado"></div>
+        </div>
+        <div>
+          <div class="field"><label>Valor bruto</label><input type="number" id="ingValorBruto" oninput="actualizarCalculoIngreso()" placeholder="0"></div>
+          <div class="field" id="ingIvaWrap" style="display:none;"><label>IVA</label><input type="number" id="ingIva" oninput="actualizarCalculoIngreso()" placeholder="0"></div>
+          <div id="ingRetencionesWrap" style="display:none;">
+            <div class="field"><label>RTE Fuente (2% del bruto)</label><input type="number" id="ingRteFuente"></div>
+            <div class="field"><label>RTE ICA (0,6% del bruto)</label><input type="number" id="ingRteIca"></div>
+            <div class="field"><label>Amortización anticipo (40% bruto+IVA)</label><input type="number" id="ingAmortizacion"></div>
+            <div class="field"><label>RTE Garantía (10% bruto+IVA)</label><input type="number" id="ingRteGarantia"></div>
+            <div class="field"><label>Otros descuentos</label><input type="number" id="ingOtrosDsctos" value="0"></div>
+          </div>
+          <div class="reco" style="margin:4px 0 12px;"><div class="box"><div class="l">Neto calculado</div><div class="v" id="ingNetoPreview">$ 0</div></div></div>
+          <div class="btnrow"><button class="primary" onclick="registrarIngreso()" id="btnRegistrarIngreso">Registrar ingreso</button></div>
+        </div>
+      </div>
+
+      <div class="tablewrap compact"><table>
+        <thead><tr><th>Tipo</th><th>N° Factura</th><th>Fecha</th><th>Valor bruto</th><th>IVA</th><th>RTE Fte</th><th>RTE ICA</th><th>Amortiz.</th><th>RTE Garant.</th><th>Otros dsc.</th><th>Neto pagado</th><th>VR recibido</th><th>Diferencia</th><th>Documentos</th><th>Banco</th><th>Estado</th><th>Acción</th></tr></thead>
+        <tbody id="ingresosBody"></tbody>
+      </table></div>
+      <div class="reco" style="margin-top:12px;">
+        <div class="box"><div class="l">Total recibido</div><div class="v" id="ingresosTotalRecibido" style="color:var(--green-ink);">—</div></div>
+        <div class="box"><div class="l">Total por cobrar (facturado, sin recibir)</div><div class="v" id="ingresosTotalPendiente" style="color:var(--amber-ink);">—</div></div>
+      </div>
     </div>
   </section>
 
@@ -506,7 +556,13 @@ function bancoKeyFromLabel(label){ if(!label) return null; for(const k in BANCOS
 let nomina = [];
 let facturas = [];
 let anticipos = [];
+let ingresos = [];
 let nominaSeleccion = new Set();
+// Porcentajes fijos del contrato actual (confirmados por Diana en sept/2026). El día que el
+// anticipo se termine de amortizar (última factura, ~2027), estos valores calculados se pueden
+// sobreescribir a mano en el formulario antes de registrar — por eso quedan como inputs editables,
+// no como fórmula fija.
+const TASAS_RETENCION_INGRESOS = { rteFuente: 0.02, rteIca: 0.006, rteGarantia: 0.10, amortizacion: 0.40 };
 let bancos = {
   'CONSTRUCTHOR-8695': { saldoInicial: 0, movimientos: [] },
   'HABITAD-CAJA': { saldoInicial: 0, movimientos: [] }
@@ -605,21 +661,23 @@ async function atWrite(table, action, records){
   }
   return out;
 }
-async function registrarMovimientoBanco(bancoKey, fecha, desc, valor){
+async function registrarMovimientoBanco(bancoKey, fecha, desc, valor, tipo){
+  tipo = tipo || 'Pago';
   if(!bancoKey || !bancos[bancoKey]) return;
+  const valorFinal = tipo==='Ingreso' ? Math.abs(valor) : -Math.abs(valor);
   try{
     const recs = await atWrite('Banco mvtos','create',[{fields:{
-      Cuenta: bancoLabel(bancoKey), Fecha: fecha, Descripcion: desc, Tipo:'Pago', Valor: -Math.abs(valor)
+      Cuenta: bancoLabel(bancoKey), Fecha: fecha, Descripcion: desc, Tipo:tipo, Valor: valorFinal
     }}]);
-    bancos[bancoKey].movimientos.push({_id:recs[0].id, fecha, desc, valor:-Math.abs(valor), tipo:'pago'});
+    bancos[bancoKey].movimientos.push({_id:recs[0].id, fecha, desc, valor:valorFinal, tipo:tipo.toLowerCase()});
   }catch(err){ console.error('No se pudo registrar el movimiento de banco:', err); }
 }
 
 // ---- carga inicial desde Airtable ----
 async function cargarTodo(){
   setStatus('Cargando datos de Airtable…', 'loading');
-  const [nomRecs, facRecs, antRecs, bcoRecs, cuentaRecs] = await Promise.all([
-    atList('Nomina'), atList('Pago proveedores'), atList('Anticipos mvtos'), atList('Banco mvtos'), atList('Banco cuentas')
+  const [nomRecs, facRecs, antRecs, ingRecs, bcoRecs, cuentaRecs] = await Promise.all([
+    atList('Nomina'), atList('Pago proveedores'), atList('Anticipos mvtos'), atList('Ingresos'), atList('Banco mvtos'), atList('Banco cuentas')
   ]);
 
   nomina = nomRecs.map(r => ({
@@ -670,6 +728,26 @@ async function cargarTodo(){
     return c;
   });
 
+  ingresos = ingRecs.map(r => ({
+    _id: r.id,
+    tipo: r.fields.Tipo || 'Factura',
+    numeroFactura: r.fields.Numero_Factura || '',
+    fecha: r.fields.Fecha || '',
+    valorBruto: r.fields.Valor_Bruto || 0,
+    iva: r.fields.IVA || 0,
+    rteFuente: r.fields.RTE_Fuente || 0,
+    rteIca: r.fields.RTE_ICA || 0,
+    amortizacion: r.fields.Amortizacion || 0,
+    rteGarantia: r.fields.RTE_Garantia || 0,
+    otrosDsctos: r.fields.Otros_Dsctos || 0,
+    netoPagado: r.fields.Neto_Pagado || 0,
+    vrRecibido: r.fields.VR_Recibido || 0,
+    banco: bancoKeyFromLabel(r.fields.Banco),
+    estado: (r.fields.Estado||'Pendiente').toLowerCase(),
+    linkFactura: r.fields.Link_Factura || '',
+    linkCorte: r.fields.Link_Corte || ''
+  }));
+
   const saldosIniciales = {};
   cuentaRecs.forEach(r=>{
     const key = bancoKeyFromLabel(r.fields.Cuenta);
@@ -715,9 +793,13 @@ function renderKPIs(){
   const pagado = nomF.filter(n=>n.estado==="pagada").reduce((s,n)=>s+n.valor,0) + facF.filter(f=>f.estado==="pagada").reduce((s,f)=>s+f.valor,0);
   const pendiente = nomF.filter(n=>n.estado==="pendiente").reduce((s,n)=>s+n.valor,0) + facF.filter(f=>f.estado==="pendiente").reduce((s,f)=>s+f.valor,0);
   const anticiposPend = anticipos.reduce((s,c)=>s+saldoContratista(c),0);
+  const ingresosRecibidos = ingresos.filter(r=>r.estado==='recibido').reduce((s,r)=>s+r.vrRecibido,0);
+  const ingresosPendientes = ingresos.filter(r=>r.estado==='pendiente').reduce((s,r)=>s+r.netoPagado,0);
   document.getElementById('kpiPagado').textContent = money(pagado);
   document.getElementById('kpiPendiente').textContent = money(pendiente);
   document.getElementById('kpiAnticipos').textContent = money(anticiposPend);
+  document.getElementById('kpiIngresosRecibidos').textContent = money(ingresosRecibidos);
+  document.getElementById('kpiIngresosPendientes').textContent = money(ingresosPendientes);
   const alertas = [];
   anticipos.forEach(c=>{ if(c.diasUltimoMov>30) alertas.push({tipo:"Anticipo sin legalizar", quien:c.contratista, detalle:`Saldo ${money(saldoContratista(c))} pendiente de cruzar`, dias:c.diasUltimoMov}); });
   facturas.forEach(f=>{ if(f.estado==="pagada" && f.factura==="pendiente") alertas.push({tipo:"Pagado sin factura", quien:f.ben, detalle:"Pagado por soporte, falta vincular factura/XML", dias:"—"}); });
@@ -922,6 +1004,161 @@ async function marcarFacturaPagada(i){
   }catch(err){ alert('No se pudo marcar como pagada: '+err.message); }
 }
 
+// ---- Ingresos del proyecto (anticipo + facturas de venta) ----
+function onIngTipoChange(){
+  const esFactura = document.getElementById('ingTipo').value === 'Factura';
+  document.getElementById('ingNumFacturaWrap').style.display = esFactura ? '' : 'none';
+  document.getElementById('ingIvaWrap').style.display = esFactura ? '' : 'none';
+  document.getElementById('ingRetencionesWrap').style.display = esFactura ? '' : 'none';
+  actualizarCalculoIngreso();
+}
+function calcularRetencionesIngreso(valorBruto, iva){
+  const vb = Number(valorBruto)||0, ivaN = Number(iva)||0;
+  const total = vb + ivaN;
+  return {
+    rteFuente: Math.round(vb * TASAS_RETENCION_INGRESOS.rteFuente),
+    rteIca: Math.round(vb * TASAS_RETENCION_INGRESOS.rteIca),
+    rteGarantia: Math.round(total * TASAS_RETENCION_INGRESOS.rteGarantia),
+    amortizacion: Math.round(total * TASAS_RETENCION_INGRESOS.amortizacion)
+  };
+}
+function calcularNetoIngreso(valorBruto, iva, rteFuente, rteIca, amortizacion, rteGarantia, otrosDsctos){
+  return (Number(valorBruto)||0) + (Number(iva)||0) - (Number(rteFuente)||0) - (Number(rteIca)||0)
+    - (Number(amortizacion)||0) - (Number(rteGarantia)||0) - (Number(otrosDsctos)||0);
+}
+function actualizarCalculoIngreso(){
+  const esFactura = document.getElementById('ingTipo').value === 'Factura';
+  const vb = Number(document.getElementById('ingValorBruto').value)||0;
+  let rteFuente=0, rteIca=0, amortizacion=0, rteGarantia=0, otrosDsctos=0, iva=0;
+  if(esFactura){
+    iva = Number(document.getElementById('ingIva').value)||0;
+    const calc = calcularRetencionesIngreso(vb, iva);
+    document.getElementById('ingRteFuente').value = calc.rteFuente;
+    document.getElementById('ingRteIca').value = calc.rteIca;
+    document.getElementById('ingAmortizacion').value = calc.amortizacion;
+    document.getElementById('ingRteGarantia').value = calc.rteGarantia;
+    rteFuente = calc.rteFuente; rteIca = calc.rteIca; amortizacion = calc.amortizacion; rteGarantia = calc.rteGarantia;
+    otrosDsctos = Number(document.getElementById('ingOtrosDsctos').value)||0;
+  }
+  const neto = esFactura ? calcularNetoIngreso(vb, iva, rteFuente, rteIca, amortizacion, rteGarantia, otrosDsctos) : vb;
+  document.getElementById('ingNetoPreview').textContent = money(neto);
+}
+async function registrarIngreso(){
+  const btn = document.getElementById('btnRegistrarIngreso');
+  const tipo = document.getElementById('ingTipo').value;
+  const esFactura = tipo === 'Factura';
+  const numeroFactura = document.getElementById('ingNumFactura').value.trim();
+  const fecha = document.getElementById('ingFecha').value || hoyISO();
+  const linkFactura = document.getElementById('ingLinkFactura').value.trim();
+  const linkCorte = document.getElementById('ingLinkCorte').value.trim();
+  const valorBruto = Number(document.getElementById('ingValorBruto').value)||0;
+  if(!valorBruto){ alert('Ingresa el valor bruto.'); return; }
+  if(esFactura && !numeroFactura){ alert('Ingresa el número de factura.'); return; }
+  let iva=0, rteFuente=0, rteIca=0, amortizacion=0, rteGarantia=0, otrosDsctos=0, neto;
+  if(esFactura){
+    iva = Number(document.getElementById('ingIva').value)||0;
+    rteFuente = Number(document.getElementById('ingRteFuente').value)||0;
+    rteIca = Number(document.getElementById('ingRteIca').value)||0;
+    amortizacion = Number(document.getElementById('ingAmortizacion').value)||0;
+    rteGarantia = Number(document.getElementById('ingRteGarantia').value)||0;
+    otrosDsctos = Number(document.getElementById('ingOtrosDsctos').value)||0;
+    neto = calcularNetoIngreso(valorBruto, iva, rteFuente, rteIca, amortizacion, rteGarantia, otrosDsctos);
+  } else {
+    neto = valorBruto; // el anticipo entra directo, sin retenciones
+  }
+  const detalle = esFactura
+    ? `Factura ${numeroFactura} — Bruto ${money(valorBruto)} + IVA ${money(iva)} − retenciones = Neto ${money(neto)}`
+    : `Anticipo — ${money(valorBruto)}`;
+  if(!confirm(`Vas a registrar este ingreso:\n${detalle}\n\n¿Los datos están correctos?`)) return;
+  btn.disabled = true;
+  try{
+    const fields = {
+      Tipo: tipo, Fecha: fecha, Valor_Bruto: valorBruto, IVA: iva,
+      RTE_Fuente: rteFuente, RTE_ICA: rteIca, Amortizacion: amortizacion, RTE_Garantia: rteGarantia,
+      Otros_Dsctos: otrosDsctos, Neto_Pagado: neto, Estado: 'Pendiente'
+    };
+    if(esFactura) fields.Numero_Factura = numeroFactura;
+    if(linkFactura) fields.Link_Factura = linkFactura;
+    if(linkCorte) fields.Link_Corte = linkCorte;
+    const recs = await atWrite('Ingresos','create',[{fields}]);
+    ingresos.unshift({_id:recs[0].id, tipo, numeroFactura, fecha, valorBruto, iva, rteFuente, rteIca,
+      amortizacion, rteGarantia, otrosDsctos, netoPagado:neto, vrRecibido:0, banco:null, estado:'pendiente',
+      linkFactura, linkCorte});
+    document.getElementById('ingNumFactura').value=''; document.getElementById('ingValorBruto').value='';
+    document.getElementById('ingIva').value=''; document.getElementById('ingLinkFactura').value='';
+    document.getElementById('ingLinkCorte').value=''; document.getElementById('ingOtrosDsctos').value='0';
+    actualizarCalculoIngreso();
+    renderAll();
+  }catch(err){ alert('No se pudo registrar el ingreso: '+err.message); }
+  finally{ btn.disabled = false; }
+}
+async function marcarIngresoRecibido(i){
+  const row = ingresos[i];
+  if(!row) return;
+  const sel = document.getElementById('ingBanco_'+i);
+  const banco = sel ? sel.value : 'CONSTRUCTHOR-8695';
+  const fechaSel = document.getElementById('ingFechaRecibo_'+i);
+  const fecha = (fechaSel && fechaSel.value) ? fechaSel.value : hoyISO();
+  const vrInput = document.getElementById('ingVrRecibido_'+i);
+  const vrRecibido = Number(vrInput && vrInput.value) || row.netoPagado;
+  const desc = row.tipo==='Anticipo' ? 'Ingreso — Anticipo' : ('Ingreso — Factura '+row.numeroFactura);
+  if(!confirm(`Vas a marcar como Recibido:\n${desc} — ${money(vrRecibido)}\n\n¿Este dinero SÍ entró ya a ${bancoLabel(banco)}?`)) return;
+  try{
+    await atWrite('Ingresos','update',[{id:row._id, fields:{Estado:'Recibido', Banco: bancoLabel(banco), VR_Recibido: vrRecibido}}]);
+    row.estado='recibido'; row.banco=banco; row.vrRecibido=vrRecibido;
+    await registrarMovimientoBanco(banco, fecha, desc, vrRecibido, 'Ingreso');
+    renderAll();
+  }catch(err){ alert('No se pudo marcar como recibido: '+err.message); }
+}
+function renderIngresos(){
+  document.getElementById('ingresosBody').innerHTML = (ingresos.map((row)=>{
+    const i = ingresos.indexOf(row);
+    const dif = row.estado==='recibido' ? (row.vrRecibido - row.netoPagado) : 0;
+    const difCell = row.estado==='recibido' ? `<span class="mono" style="color:${Math.abs(dif)<=1?'var(--green-ink)':'var(--red-ink)'}">${money(dif)}</span>` : '<span class="muted">—</span>';
+    const docs = `${row.linkFactura ? `<a href="${row.linkFactura}" target="_blank" rel="noopener">Factura</a>` : '<span class="muted">Factura —</span>'} · ${row.linkCorte ? `<a href="${row.linkCorte}" target="_blank" rel="noopener">Corte</a>` : '<span class="muted">Corte —</span>'}`;
+    const accion = row.estado==='pendiente' ? `
+      <div class="row-actions">
+        <input type="date" class="mini" id="ingFechaRecibo_${i}" value="${hoyISO()}" title="Fecha real en que entró al banco">
+        <select class="mini" id="ingBanco_${i}">
+          <option value="CONSTRUCTHOR-8695">Bancolombia 8695</option>
+          <option value="HABITAD-CAJA">Caja Social HABI+TAD</option>
+        </select>
+        <input type="number" class="mini" id="ingVrRecibido_${i}" placeholder="${row.netoPagado}" title="Valor real recibido (si difiere del neto calculado)">
+        <button class="action" onclick="marcarIngresoRecibido(${i})">Marcar recibido</button>
+      </div>` : '<span class="muted">—</span>';
+    return `<tr>
+      <td>${row.tipo==='Anticipo' ? '<span class="badge neutro">Anticipo</span>' : '<span class="badge alerta">Factura</span>'}</td>
+      <td class="muted">${row.numeroFactura || '—'}</td>
+      <td class="muted">${row.fecha}</td>
+      <td class="mono">${money(row.valorBruto)}</td>
+      <td class="mono">${money(row.iva)}</td>
+      <td class="mono">${money(row.rteFuente)}</td>
+      <td class="mono">${money(row.rteIca)}</td>
+      <td class="mono">${money(row.amortizacion)}</td>
+      <td class="mono">${money(row.rteGarantia)}</td>
+      <td class="mono">${money(row.otrosDsctos)}</td>
+      <td class="mono">${money(row.netoPagado)}</td>
+      <td class="mono">${row.estado==='recibido' ? money(row.vrRecibido) : '—'}</td>
+      <td>${difCell}</td>
+      <td class="muted">${docs}</td>
+      <td class="muted">${bancoLabel(row.banco)}</td>
+      <td>${row.estado==='recibido' ? '<span class="badge pagada"><span class="dot"></span>Recibido</span>' : '<span class="badge pendiente"><span class="dot"></span>Pendiente</span>'}</td>
+      <td>${accion}</td>
+    </tr>`;
+  }).join('')) || '<tr><td colspan="17" class="muted">Sin ingresos registrados todavía.</td></tr>';
+  const recibidos = ingresos.filter(r=>r.estado==='recibido');
+  const pendientes = ingresos.filter(r=>r.estado==='pendiente');
+  document.getElementById('ingresosTotalRecibido').textContent = money(recibidos.reduce((s,r)=>s+r.vrRecibido,0));
+  document.getElementById('ingresosTotalPendiente').textContent = money(pendientes.reduce((s,r)=>s+r.netoPagado,0));
+}
+function exportIngresos(){
+  const rows = ingresos.map(r=>[r.tipo, r.numeroFactura, r.fecha, r.valorBruto, r.iva, r.rteFuente, r.rteIca,
+    r.amortizacion, r.rteGarantia, r.otrosDsctos, r.netoPagado, r.estado==='recibido'?r.vrRecibido:'',
+    r.estado==='recibido'?(r.vrRecibido-r.netoPagado):'', r.linkFactura, r.linkCorte, bancoLabel(r.banco), r.estado]);
+  exportarExcel('ingresos_san_antonio.xlsx', ['Tipo','Numero_Factura','Fecha','Valor_Bruto','IVA','RTE_Fuente','RTE_ICA',
+    'Amortizacion','RTE_Garantia','Otros_Dsctos','Neto_Pagado','VR_Recibido','Diferencia','Link_Factura','Link_Corte','Banco','Estado'], rows);
+}
+
 function renderAnticipos(){
   document.getElementById('anticiposList').innerHTML = anticipos.map((c)=>{
     const anticipado = totalAnticipado(c), legalizado = totalLegalizado(c), saldo = saldoContratista(c);
@@ -962,7 +1199,7 @@ function renderBanco(){
   }
   document.getElementById('bancoBody').innerHTML = filas.slice().reverse().map(m=>`
     <tr><td class="muted">${m.fecha}</td><td>${m.desc}</td>
-    <td>${m.tipo==="ajuste" ? '<span class="badge neutro">Ajuste</span>' : '<span class="badge pagada"><span class="dot"></span>Pago</span>'}</td>
+    <td>${m.tipo==="ajuste" ? '<span class="badge neutro">Ajuste</span>' : (m.tipo==="ingreso" ? '<span class="badge pagada"><span class="dot"></span>Ingreso</span>' : '<span class="badge pagada"><span class="dot"></span>Pago</span>')}</td>
     <td class="mono">${money(m.valor)}</td><td class="mono">${money(m.saldoRun)}</td></tr>`).join('')
     || '<tr><td colspan="5" class="muted">Sin movimientos aún.</td></tr>';
 }
@@ -980,7 +1217,7 @@ async function agregarAjuste(){
   }catch(err){ alert('No se pudo agregar el ajuste: '+err.message); }
 }
 
-function renderAll(){ renderKPIs(); renderNomina(); renderFacturas(); renderAnticipos(); renderBanco(); }
+function renderAll(){ renderKPIs(); renderNomina(); renderFacturas(); renderAnticipos(); renderIngresos(); renderBanco(); }
 
 // ============================================================
 // Exportar a Excel real (.xlsx)
