@@ -311,8 +311,8 @@
         <div><h2>Facturas y pagos a proveedores</h2><p class="hint">El soporte de pago abre el registro, lo marca "Pagada" y mueve el banco elegido. La OC/OS y la factura XML se vinculan cuando lleguen.</p></div>
         <button class="action" onclick="exportFacturas()">Exportar a Excel (.xlsx)</button>
       </div>
-      <div class="tablewrap"><table>
-        <thead><tr><th>Fecha</th><th>Beneficiario</th><th>Concepto</th><th>Clasificación</th><th>Subcategoría</th><th>Valor</th><th>OC/OS</th><th>Banco</th><th>Estado</th><th>Factura/XML</th></tr></thead>
+      <div class="tablewrap compact"><table>
+        <thead><tr><th>Fecha</th><th>Beneficiario</th><th>Concepto</th><th>Clasificación</th><th>Subcategoría</th><th>Deducible</th><th>Bruto</th><th>IVA</th><th>Imp. Consumo</th><th>RTE Fte</th><th>RTE ICA</th><th>Otros Dsctos</th><th>Valor neto</th><th>OC/OS</th><th>Banco</th><th>Estado</th><th>Factura/XML</th></tr></thead>
         <tbody id="facturasBody"></tbody>
       </table></div>
     </div>
@@ -431,7 +431,20 @@
           <div class="field"><label>Concepto</label><input type="text" id="qConcepto" placeholder="Ej. Materiales obra"></div>
           <div class="field"><label>Clasificación de costo (opcional)</label><input type="text" id="qClasificacion" placeholder="Ej. Materiales, Mano de obra, Maquinaria, Administrativo"></div>
           <div class="field"><label>Subcategoría (opcional)</label><input type="text" id="qSubcategoria" placeholder="Ej. Topografía, Dotación, Comité de obra"></div>
-          <div class="field"><label>Valor</label><input type="number" id="qValor" placeholder="0"></div>
+          <div class="field"><label>Deducible (opcional)</label>
+            <select id="qDeducible">
+              <option value="">— Sin definir —</option>
+              <option value="Deducible">Deducible</option>
+              <option value="No Deducible">No Deducible</option>
+            </select>
+          </div>
+          <div class="field"><label>Valor bruto (opcional — si lo llenas, el valor neto se calcula solo)</label><input type="number" id="qBruto" oninput="actualizarValorPuntual()" placeholder="0"></div>
+          <div class="field"><label>IVA (opcional)</label><input type="number" id="qIVA" oninput="actualizarValorPuntual()" placeholder="0"></div>
+          <div class="field"><label>Impuesto al consumo (opcional)</label><input type="number" id="qImpConsumo" oninput="actualizarValorPuntual()" placeholder="0"></div>
+          <div class="field"><label>RTE Fuente (opcional)</label><input type="number" id="qRteFte" oninput="actualizarValorPuntual()" placeholder="0"></div>
+          <div class="field"><label>RTE ICA (opcional)</label><input type="number" id="qRteIca" oninput="actualizarValorPuntual()" placeholder="0"></div>
+          <div class="field"><label>Otros descuentos (opcional)</label><input type="number" id="qOtrosDsctos" oninput="actualizarValorPuntual()" placeholder="0"></div>
+          <div class="field"><label>Valor neto pagado (se calcula solo si llenas el bruto; si no, digítalo aquí)</label><input type="number" id="qValor" placeholder="0"></div>
           <div class="field"><label>OC/OS (si aplica)</label><input type="text" id="qOC" placeholder="Opcional"></div>
           <div class="field"><label>Cuenta bancaria (de donde sale el pago)</label>
             <select id="qBanco">
@@ -460,10 +473,10 @@
               <option value="2026-10">Octubre 2026</option>
             </select>
           </div>
-          <textarea class="bulk" id="bulkText" placeholder="factura,2026-09-15,Transportes Boyacá,Transporte materiales,1850000,,no,CONSTRUCTHOR-8695,,,,Materiales,Transporte
+          <textarea class="bulk" id="bulkText" placeholder="factura,2026-09-15,Transportes Boyacá,Transporte materiales,1850000,,no,CONSTRUCTHOR-8695,,,,Materiales,Transporte,1850000,0,0,0,0,0,Deducible
 nomina,2026-07-01,Yesenia Camargo,,780000,,si,HABITAD-CAJA,,,2026-06
 nomina,2026-07-20,Mario Pérez,Liquidación,2350000,,no,,79876543,Administrativo/Obra,2026-06"></textarea>
-          <p class="lanesub" style="margin-top:6px;">Columnas: tipo,fecha(pago),nombre,concepto,valor,oc,soporte(si/no),banco,cedula,grupo,período contable,clasificación de costo,subcategoría. Período contable es opcional — solo si es distinto al mes de la fecha de pago, ej. nómina causada en junio y pagada en julio: pon 2026-06 ahí. En las filas de nómina, "concepto" es opcional y sirve para marcar Liquidación o Seguridad social (si se deja vacío, queda como Salario) — así una liquidación que se causó en junio pero aún no se paga porque el empleado no la ha aprobado, se registra con período 2026-06 y queda Pendiente hasta que la pagues, sin importar en qué mes caiga el pago real. Las dos últimas columnas (clasificación y subcategoría) solo aplican a filas de tipo "factura" — sirven para agrupar el gasto igual que en tu Excel de control (ej. Materiales/Topografía/Mano de obra/Maquinaria/Administrativo y Comité de obra/Dotación/Papelería/etc.), y quedan vacías si no se necesitan.</p>
+          <p class="lanesub" style="margin-top:6px;">Columnas: tipo,fecha(pago),nombre,concepto,valor(neto pagado),oc,soporte(si/no),banco,cedula,grupo,período contable,clasificación de costo,subcategoría,valor bruto,iva,impuesto al consumo,rte fuente,rte ica,otros descuentos,deducible. Período contable es opcional — solo si es distinto al mes de la fecha de pago, ej. nómina causada en junio y pagada en julio: pon 2026-06 ahí. En las filas de nómina, "concepto" es opcional y sirve para marcar Liquidación o Seguridad social (si se deja vacío, queda como Salario) — así una liquidación que se causó en junio pero aún no se paga porque el empleado no la ha aprobado, se registra con período 2026-06 y queda Pendiente hasta que la pagues, sin importar en qué mes caiga el pago real. Las columnas de clasificación, subcategoría, deducible, valor bruto, iva, impuesto al consumo, rte fuente, rte ica y otros descuentos solo aplican a filas de tipo "factura" — sirven para llevar el mismo detalle de tu Excel de control (deducible se escribe "Deducible" o "No Deducible", y se puede dejar vacío). Si llenas el valor bruto (o cualquier impuesto/retención) en una fila de factura, la app calcula sola el valor neto que sale del banco (bruto + iva + impuesto al consumo − rte fuente − rte ica − otros descuentos) y <b>ignora</b> lo que pongas en la columna "valor" — esa columna solo se usa tal cual para pagos sueltos sin desglose (ej. caja menor, honorarios), donde puedes dejar el bruto y los impuestos en 0 y poner directamente el valor pagado.</p>
           <div class="btnrow">
             <button class="primary" onclick="procesarBulk()" id="btnProcesarBulk">Procesar filas pegadas</button>
             <button class="action ghost" onclick="descargarPlantilla()">Descargar plantilla Excel</button>
@@ -709,6 +722,13 @@ async function cargarTodo(){
     concepto: r.fields.Concepto || '—',
     clasificacion: r.fields.Clasificacion_Costo || '',
     subcategoria: r.fields.Subcategoria || '',
+    deducible: r.fields.Deducible || '',
+    bruto: r.fields.Valor_Bruto || 0,
+    iva: r.fields.IVA || 0,
+    impConsumo: r.fields.Impuesto_Consumo || 0,
+    rteFte: r.fields.RTE_Fuente || 0,
+    rteIca: r.fields.RTE_ICA || 0,
+    otrosDsctos: r.fields.Otros_Dsctos || 0,
     valor: r.fields.Valor || 0,
     oc: r.fields.OC_OS || null,
     banco: bancoKeyFromLabel(r.fields.Banco),
@@ -990,13 +1010,20 @@ function renderFacturas(){
       <td class="muted">${f.concepto}</td>
       <td class="muted">${f.clasificacion || '—'}</td>
       <td class="muted">${f.subcategoria || '—'}</td>
+      <td class="muted">${f.deducible || '—'}</td>
+      <td class="mono">${f.bruto ? money(f.bruto) : '—'}</td>
+      <td class="mono">${f.iva ? money(f.iva) : '—'}</td>
+      <td class="mono">${f.impConsumo ? money(f.impConsumo) : '—'}</td>
+      <td class="mono">${f.rteFte ? money(f.rteFte) : '—'}</td>
+      <td class="mono">${f.rteIca ? money(f.rteIca) : '—'}</td>
+      <td class="mono">${f.otrosDsctos ? money(f.otrosDsctos) : '—'}</td>
       <td class="mono">${money(f.valor)}</td>
       <td>${f.oc ? `<span class="badge neutro">${f.oc}</span>` : '<span class="muted">Sin OC</span>'}</td>
       <td class="muted">${bancoLabel(f.banco)}</td>
       <td>${estadoCell}</td>
       <td class="row-actions">${f.factura==="vinculada" ? '<span class="badge pagada"><span class="dot"></span>Vinculada</span>' : `<button class="action" onclick="vincularFactura(${i})">Vincular factura</button>`}</td>
     </tr>`;
-  }).join('')) || '<tr><td colspan="10" class="muted">Sin registros en este período.</td></tr>';
+  }).join('')) || '<tr><td colspan="17" class="muted">Sin registros en este período.</td></tr>';
 }
 async function vincularFactura(i){
   const row = facturas[i];
@@ -1248,8 +1275,8 @@ function exportNomina(){
   exportarExcel('nomina_san_antonio.xlsx', ['Empleado','Cedula','Grupo','Concepto','Periodo_causacion(AAAA-MM)','Periodo_causacion','Fecha_pago','Valor','Estado','Banco','Soporte'], rows);
 }
 function exportFacturas(){
-  const rows = facturas.filter(f=>pasaFiltro(f.periodo)).map(f=>[f.fecha,f.ben,f.concepto,f.clasificacion||'',f.subcategoria||'',f.valor,f.oc||'',bancoLabel(f.banco),f.estado,f.factura]);
-  exportarExcel('facturas_pagos_san_antonio.xlsx', ['Fecha','Beneficiario','Concepto','Clasificacion_Costo','Subcategoria','Valor','OC/OS','Banco','Estado','Factura'], rows);
+  const rows = facturas.filter(f=>pasaFiltro(f.periodo)).map(f=>[f.fecha,f.ben,f.concepto,f.clasificacion||'',f.subcategoria||'',f.deducible||'',f.bruto||0,f.iva||0,f.impConsumo||0,f.rteFte||0,f.rteIca||0,f.otrosDsctos||0,f.valor,f.oc||'',bancoLabel(f.banco),f.estado,f.factura]);
+  exportarExcel('facturas_pagos_san_antonio.xlsx', ['Fecha','Beneficiario','Concepto','Clasificacion_Costo','Subcategoria','Deducible','Valor_Bruto','IVA','Impuesto_Consumo','RTE_Fuente','RTE_ICA','Otros_Dsctos','Valor_Neto','OC/OS','Banco','Estado','Factura'], rows);
 }
 function exportAnticipos(){
   const rows = [];
@@ -1265,12 +1292,23 @@ function exportBanco(){
   exportarExcel('banco_'+key.toLowerCase()+'.xlsx', ['Fecha','Descripción','Tipo','Valor','Saldo'], rows);
 }
 function descargarPlantilla(){
-  exportarExcel('plantilla_carga_pagos.xlsx', ['tipo(nomina/factura)','fecha_pago','nombre','concepto(en nomina: Salario/Liquidacion/Seguridad social, vacio=Salario)','valor','oc','soporte(si/no)','banco(CONSTRUCTHOR-8695/CONSTRUCTHOR-OTROS/HABITAD-CAJA)','cedula(solo nomina)','grupo(solo nomina)','periodo_contable(obligatorio en Liquidacion — ej 2026-06, el mes en que se causó, casi siempre distinto a fecha_pago; opcional en Salario/Seguridad social si coincide con fecha_pago)','clasificacion_costo(solo factura — ej. Materiales/Mano de obra/Maquinaria/Administrativo)','subcategoria(solo factura — ej. Comite de obra/Topografia/Dotacion/Papeleria)'], []);
+  exportarExcel('plantilla_carga_pagos.xlsx', ['tipo(nomina/factura)','fecha_pago','nombre','concepto(en nomina: Salario/Liquidacion/Seguridad social, vacio=Salario)','valor(neto pagado)','oc','soporte(si/no)','banco(CONSTRUCTHOR-8695/CONSTRUCTHOR-OTROS/HABITAD-CAJA)','cedula(solo nomina)','grupo(solo nomina)','periodo_contable(obligatorio en Liquidacion — ej 2026-06, el mes en que se causó, casi siempre distinto a fecha_pago; opcional en Salario/Seguridad social si coincide con fecha_pago)','clasificacion_costo(solo factura — ej. Materiales/Mano de obra/Maquinaria/Administrativo)','subcategoria(solo factura — ej. Comite de obra/Topografia/Dotacion/Papeleria)','valor_bruto(solo factura, opcional)','iva(solo factura, opcional)','impuesto_consumo(solo factura, opcional)','rte_fuente(solo factura, opcional)','rte_ica(solo factura, opcional)','otros_descuentos(solo factura, opcional)','deducible(solo factura, opcional — Deducible/No Deducible)'], []);
 }
 
 // ============================================================
 // Cargar pagos: registro puntual y carga en bloque
 // ============================================================
+function actualizarValorPuntual(){
+  const bruto = Number(document.getElementById('qBruto').value)||0;
+  const iva = Number(document.getElementById('qIVA').value)||0;
+  const impConsumo = Number(document.getElementById('qImpConsumo').value)||0;
+  const rteFte = Number(document.getElementById('qRteFte').value)||0;
+  const rteIca = Number(document.getElementById('qRteIca').value)||0;
+  const otrosDsctos = Number(document.getElementById('qOtrosDsctos').value)||0;
+  if(bruto>0 || iva>0 || impConsumo>0 || rteFte>0 || rteIca>0 || otrosDsctos>0){
+    document.getElementById('qValor').value = bruto + iva + impConsumo - rteFte - rteIca - otrosDsctos;
+  }
+}
 async function registrarPuntual(){
   const btn = document.getElementById('btnRegistrarPuntual');
   const fecha = document.getElementById('qFecha').value || hoyISO();
@@ -1278,7 +1316,16 @@ async function registrarPuntual(){
   const concepto = document.getElementById('qConcepto').value.trim();
   const clasificacion = document.getElementById('qClasificacion').value.trim();
   const subcategoria = document.getElementById('qSubcategoria').value.trim();
-  const valor = Number(document.getElementById('qValor').value)||0;
+  const deducible = document.getElementById('qDeducible').value;
+  const bruto = Number(document.getElementById('qBruto').value)||0;
+  const iva = Number(document.getElementById('qIVA').value)||0;
+  const impConsumo = Number(document.getElementById('qImpConsumo').value)||0;
+  const rteFte = Number(document.getElementById('qRteFte').value)||0;
+  const rteIca = Number(document.getElementById('qRteIca').value)||0;
+  const otrosDsctos = Number(document.getElementById('qOtrosDsctos').value)||0;
+  const valorManual = Number(document.getElementById('qValor').value)||0;
+  const tieneDesglose = bruto>0 || iva>0 || impConsumo>0 || rteFte>0 || rteIca>0 || otrosDsctos>0;
+  const valor = tieneDesglose ? (bruto + iva + impConsumo - rteFte - rteIca - otrosDsctos) : valorManual;
   const oc = document.getElementById('qOC').value.trim();
   const banco = document.getElementById('qBanco').value;
   const tieneSoporte = document.getElementById('qSoporte').checked;
@@ -1287,18 +1334,22 @@ async function registrarPuntual(){
   try{
     const fields = {
       Fecha: fecha, Beneficiario: ben, Concepto: concepto||'—',
-      Clasificacion_Costo: clasificacion||'', Subcategoria: subcategoria||'', Valor: valor,
+      Clasificacion_Costo: clasificacion||'', Subcategoria: subcategoria||'', Deducible: deducible||'', Valor: valor,
+      Valor_Bruto: bruto, IVA: iva, Impuesto_Consumo: impConsumo, RTE_Fuente: rteFte, RTE_ICA: rteIca, Otros_Dsctos: otrosDsctos,
       OC_OS: oc||'', Estado: estadoAirtable(tieneSoporte?'pagada':'pendiente'),
       Factura_Estado: 'Pendiente', Periodo: periodoDe(fecha)
     };
     if(tieneSoporte) fields.Banco = bancoLabel(banco);
     const recs = await atWrite('Pago proveedores','create',[{fields}]);
     facturas.unshift({_id:recs[0].id, fecha, periodo:periodoDe(fecha), ben, concepto:concepto||'—',
-      clasificacion:clasificacion||'', subcategoria:subcategoria||'', valor, oc:oc||null,
+      clasificacion:clasificacion||'', subcategoria:subcategoria||'', deducible:deducible||'', bruto, iva, impConsumo, rteFte, rteIca, otrosDsctos,
+      valor, oc:oc||null,
       estado: tieneSoporte?'pagada':'pendiente', factura:'pendiente', banco: tieneSoporte?banco:null});
     if(tieneSoporte) await registrarMovimientoBanco(banco, fecha, 'Pago — '+ben, valor);
     document.getElementById('qBen').value=''; document.getElementById('qConcepto').value='';
-    document.getElementById('qClasificacion').value=''; document.getElementById('qSubcategoria').value='';
+    document.getElementById('qClasificacion').value=''; document.getElementById('qSubcategoria').value=''; document.getElementById('qDeducible').value='';
+    document.getElementById('qBruto').value=''; document.getElementById('qIVA').value=''; document.getElementById('qImpConsumo').value='';
+    document.getElementById('qRteFte').value=''; document.getElementById('qRteIca').value=''; document.getElementById('qOtrosDsctos').value='';
     document.getElementById('qValor').value=''; document.getElementById('qOC').value='';
     document.getElementById('qSoporte').checked=false;
     const c = document.getElementById('qConfirm'); c.style.display='block'; setTimeout(()=>c.style.display='none', 3500);
@@ -1338,17 +1389,18 @@ async function agregarFilasBulk(lineas){
   lineas.forEach(l=>{
     if(!l || !String(l).trim()) return;
     const partes = String(l).split(',').map(s=>(s||'').trim());
-    const [tipoRaw,fecha,nombre,concepto,valorStr,oc,soporte,banco,cedula,grupo,periodoManual,clasificacion,subcategoria] = partes;
+    const [tipoRaw,fecha,nombre,concepto,valorStr,oc,soporte,banco,cedula,grupo,periodoManual,clasificacion,subcategoria,brutoStr,ivaStr,impConsumoStr,rteFteStr,rteIcaStr,otrosStr,deducible] = partes;
     const tipo = (tipoRaw||'').toLowerCase();
     if(!fecha || tipo.indexOf('tipo')===0 || fecha.toLowerCase().indexOf('fecha')===0) return;
     const tienesop = /^s/i.test(soporte||'');
     const bancoUsado = banco || 'CONSTRUCTHOR-8695';
-    const valor = Number(valorStr)||0;
+    const valorManual = Number(valorStr)||0;
     const nombreFinal = nombre || 'Sin nombre';
     // El período contable manda si se indica (útil cuando la fecha de PAGO cae en un mes distinto
     // al mes en que se causó el gasto, por ejemplo nómina causada en junio y pagada en julio).
     const periodoFinal = (periodoManual && periodoManual.trim()) || periodoDe(fecha) || periodoDefault;
     if(tipo==='nomina'){
+      const valor = valorManual;
       const conceptoFinal = (concepto && concepto.trim()) || 'Salario';
       const fields = {Empleado:nombreFinal, Periodo:periodoFinal, Periodo_Label:fecha, Valor:valor,
         Estado:estadoAirtable(tienesop?'pagada':'pendiente'), Concepto:conceptoFinal};
@@ -1359,12 +1411,22 @@ async function agregarFilasBulk(lineas){
         valor, estado:tienesop?'pagada':'pendiente', soporte:null, banco:tienesop?bancoUsado:null},
         banco: tienesop?bancoUsado:null, fecha, tipo:'nomina', valor, nombre: nombreFinal});
     } else {
+      const bruto = Number(brutoStr)||0, iva = Number(ivaStr)||0, impConsumo = Number(impConsumoStr)||0,
+        rteFte = Number(rteFteStr)||0, rteIca = Number(rteIcaStr)||0, otrosDsctos = Number(otrosStr)||0;
+      // Si viene el desglose (valor bruto y/o impuestos), el valor neto pagado SIEMPRE se calcula
+      // a partir de él — igual que la columna "VALOR A PAGAR" del Excel de control — en vez de
+      // confiar en un valor digitado aparte que se puede desincronizar del desglose.
+      // Si no hay desglose (pagos sueltos sin factura formal, ej. caja menor u honorarios), se usa el valor digitado.
+      const tieneDesglose = bruto>0 || iva>0 || impConsumo>0 || rteFte>0 || rteIca>0 || otrosDsctos>0;
+      const valor = tieneDesglose ? (bruto + iva + impConsumo - rteFte - rteIca - otrosDsctos) : valorManual;
       const fields = {Fecha:fecha, Beneficiario:nombreFinal, Concepto:concepto||'—',
-        Clasificacion_Costo: clasificacion||'', Subcategoria: subcategoria||'', Valor:valor, OC_OS:oc||'',
+        Clasificacion_Costo: clasificacion||'', Subcategoria: subcategoria||'', Deducible: deducible||'', Valor:valor, OC_OS:oc||'',
+        Valor_Bruto: bruto, IVA: iva, Impuesto_Consumo: impConsumo, RTE_Fuente: rteFte, RTE_ICA: rteIca, Otros_Dsctos: otrosDsctos,
         Estado:estadoAirtable(tienesop?'pagada':'pendiente'), Factura_Estado:'Pendiente', Periodo: periodoFinal};
       if(tienesop) fields.Banco = bancoLabel(bancoUsado);
       facturaNuevas.push({fields, local:{fecha, periodo:periodoFinal, ben:nombreFinal, concepto:concepto||'—',
-        clasificacion:clasificacion||'', subcategoria:subcategoria||'',
+        clasificacion:clasificacion||'', subcategoria:subcategoria||'', deducible:deducible||'',
+        bruto, iva, impConsumo, rteFte, rteIca, otrosDsctos,
         valor, oc:oc||null, estado:tienesop?'pagada':'pendiente', factura:'pendiente', banco:tienesop?bancoUsado:null},
         banco: tienesop?bancoUsado:null, fecha, tipo:'factura', valor, nombre: nombreFinal});
     }
