@@ -293,6 +293,7 @@
           <div class="field"><label>Cuenta bancaria</label>
             <select id="gpBanco">
               <option value="CONSTRUCTHOR-8695">Bancolombia · CONSTRUCTHOR (cta 8695)</option>
+              <option value="CONSTRUCTHOR-OTROS">Otro banco CONSTRUCTHOR</option>
               <option value="HABITAD-CAJA">Caja Social · HABI+TAD</option>
             </select>
           </div>
@@ -311,7 +312,7 @@
         <button class="action" onclick="exportFacturas()">Exportar a Excel (.xlsx)</button>
       </div>
       <div class="tablewrap"><table>
-        <thead><tr><th>Fecha</th><th>Beneficiario</th><th>Concepto</th><th>Valor</th><th>OC/OS</th><th>Banco</th><th>Estado</th><th>Factura/XML</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Beneficiario</th><th>Concepto</th><th>Clasificación</th><th>Subcategoría</th><th>Valor</th><th>OC/OS</th><th>Banco</th><th>Estado</th><th>Factura/XML</th></tr></thead>
         <tbody id="facturasBody"></tbody>
       </table></div>
     </div>
@@ -377,13 +378,14 @@
   <section id="banco">
     <div class="card">
       <div class="card-head">
-        <div><h2>Movimiento de banco</h2><p class="hint">Cada pago marcado como "Pagada" (nómina o facturas) genera aquí un movimiento y mueve el saldo. Este saldo es acumulado desde el inicio; no lo filtra el período de arriba.</p></div>
+        <div><h2>Movimiento de banco</h2><p class="hint">Cada pago marcado como "Pagada" (nómina o facturas) genera aquí un movimiento y mueve el saldo. Este saldo es acumulado desde el inicio; no lo filtra el período de arriba. "Otro banco CONSTRUCTHOR" es una cuenta aparte, para pagos que hizo el socio por fuera de la cta 8695 — queda registrado quién pagó, pero no mueve ni afecta la conciliación de la cta 8695.</p></div>
         <button class="action" onclick="exportBanco()">Exportar a Excel (.xlsx)</button>
       </div>
       <div class="toolbar" style="margin-top:0;">
         <label for="bancoSel">Cuenta</label>
         <select id="bancoSel" onchange="renderBanco()">
           <option value="CONSTRUCTHOR-8695">Bancolombia · CONSTRUCTHOR (cta 8695)</option>
+          <option value="CONSTRUCTHOR-OTROS">Otro banco CONSTRUCTHOR</option>
           <option value="HABITAD-CAJA">Caja Social · HABI+TAD</option>
         </select>
       </div>
@@ -427,11 +429,14 @@
           <div class="field"><label>Fecha</label><input type="date" id="qFecha"></div>
           <div class="field"><label>Beneficiario</label><input type="text" id="qBen" placeholder="Ej. Ferretería El Tornillo SAS"></div>
           <div class="field"><label>Concepto</label><input type="text" id="qConcepto" placeholder="Ej. Materiales obra"></div>
+          <div class="field"><label>Clasificación de costo (opcional)</label><input type="text" id="qClasificacion" placeholder="Ej. Materiales, Mano de obra, Maquinaria, Administrativo"></div>
+          <div class="field"><label>Subcategoría (opcional)</label><input type="text" id="qSubcategoria" placeholder="Ej. Topografía, Dotación, Comité de obra"></div>
           <div class="field"><label>Valor</label><input type="number" id="qValor" placeholder="0"></div>
           <div class="field"><label>OC/OS (si aplica)</label><input type="text" id="qOC" placeholder="Opcional"></div>
           <div class="field"><label>Cuenta bancaria (de donde sale el pago)</label>
             <select id="qBanco">
               <option value="CONSTRUCTHOR-8695">Bancolombia · CONSTRUCTHOR (cta 8695)</option>
+              <option value="CONSTRUCTHOR-OTROS">Otro banco CONSTRUCTHOR</option>
               <option value="HABITAD-CAJA">Caja Social · HABI+TAD</option>
             </select>
           </div>
@@ -455,10 +460,10 @@
               <option value="2026-10">Octubre 2026</option>
             </select>
           </div>
-          <textarea class="bulk" id="bulkText" placeholder="factura,2026-09-15,Transportes Boyacá,Transporte materiales,1850000,,no,CONSTRUCTHOR-8695,,,
+          <textarea class="bulk" id="bulkText" placeholder="factura,2026-09-15,Transportes Boyacá,Transporte materiales,1850000,,no,CONSTRUCTHOR-8695,,,,Materiales,Transporte
 nomina,2026-07-01,Yesenia Camargo,,780000,,si,HABITAD-CAJA,,,2026-06
 nomina,2026-07-20,Mario Pérez,Liquidación,2350000,,no,,79876543,Administrativo/Obra,2026-06"></textarea>
-          <p class="lanesub" style="margin-top:6px;">Columnas: tipo,fecha(pago),nombre,concepto,valor,oc,soporte(si/no),banco,cedula,grupo,período contable (opcional — solo si es distinto al mes de la fecha de pago, ej. nómina causada en junio y pagada en julio: pon 2026-06 aquí). En las filas de nómina, "concepto" es opcional y sirve para marcar Liquidación o Seguridad social (si se deja vacío, queda como Salario) — así una liquidación que se causó en junio pero aún no se paga porque el empleado no la ha aprobado, se registra con período 2026-06 y queda Pendiente hasta que la pagues, sin importar en qué mes caiga el pago real.</p>
+          <p class="lanesub" style="margin-top:6px;">Columnas: tipo,fecha(pago),nombre,concepto,valor,oc,soporte(si/no),banco,cedula,grupo,período contable,clasificación de costo,subcategoría. Período contable es opcional — solo si es distinto al mes de la fecha de pago, ej. nómina causada en junio y pagada en julio: pon 2026-06 ahí. En las filas de nómina, "concepto" es opcional y sirve para marcar Liquidación o Seguridad social (si se deja vacío, queda como Salario) — así una liquidación que se causó en junio pero aún no se paga porque el empleado no la ha aprobado, se registra con período 2026-06 y queda Pendiente hasta que la pagues, sin importar en qué mes caiga el pago real. Las dos últimas columnas (clasificación y subcategoría) solo aplican a filas de tipo "factura" — sirven para agrupar el gasto igual que en tu Excel de control (ej. Materiales/Topografía/Mano de obra/Maquinaria/Administrativo y Comité de obra/Dotación/Papelería/etc.), y quedan vacías si no se necesitan.</p>
           <div class="btnrow">
             <button class="primary" onclick="procesarBulk()" id="btnProcesarBulk">Procesar filas pegadas</button>
             <button class="action ghost" onclick="descargarPlantilla()">Descargar plantilla Excel</button>
@@ -549,7 +554,7 @@ function entrarApp(empresa){
 const money = n => Number(n||0).toLocaleString('es-CO', {style:'currency', currency:'COP', maximumFractionDigits:0});
 let periodoActual = 'todos';
 // OJO: estos textos deben ser EXACTAMENTE iguales a las opciones de Selección única creadas en Airtable
-const BANCOS = {'CONSTRUCTHOR-8695':'Bancolombia CONSTRUCTHOR (cta 8695)', 'HABITAD-CAJA':'Caja Social HABI+TAD'};
+const BANCOS = {'CONSTRUCTHOR-8695':'Bancolombia CONSTRUCTHOR (cta 8695)', 'CONSTRUCTHOR-OTROS':'Otro banco CONSTRUCTHOR', 'HABITAD-CAJA':'Caja Social HABI+TAD'};
 function bancoLabel(k){ return k ? (BANCOS[k]||k) : '—'; }
 function bancoKeyFromLabel(label){ if(!label) return null; for(const k in BANCOS){ if(BANCOS[k]===label) return k; } return null; }
 
@@ -565,6 +570,7 @@ let nominaSeleccion = new Set();
 const TASAS_RETENCION_INGRESOS = { rteFuente: 0.02, rteIca: 0.006, rteGarantia: 0.10, amortizacion: 0.40 };
 let bancos = {
   'CONSTRUCTHOR-8695': { saldoInicial: 0, movimientos: [] },
+  'CONSTRUCTHOR-OTROS': { saldoInicial: 0, movimientos: [] },
   'HABITAD-CAJA': { saldoInicial: 0, movimientos: [] }
 };
 
@@ -701,6 +707,8 @@ async function cargarTodo(){
     periodo: r.fields.Periodo || periodoDe(r.fields.Fecha||''),
     ben: r.fields.Beneficiario || 'Sin nombre',
     concepto: r.fields.Concepto || '—',
+    clasificacion: r.fields.Clasificacion_Costo || '',
+    subcategoria: r.fields.Subcategoria || '',
     valor: r.fields.Valor || 0,
     oc: r.fields.OC_OS || null,
     banco: bancoKeyFromLabel(r.fields.Banco),
@@ -755,6 +763,7 @@ async function cargarTodo(){
   });
   bancos = {
     'CONSTRUCTHOR-8695': { saldoInicial: saldosIniciales['CONSTRUCTHOR-8695']||0, movimientos: [] },
+    'CONSTRUCTHOR-OTROS': { saldoInicial: saldosIniciales['CONSTRUCTHOR-OTROS']||0, movimientos: [] },
     'HABITAD-CAJA': { saldoInicial: saldosIniciales['HABITAD-CAJA']||0, movimientos: [] }
   };
   bcoRecs.forEach(r=>{
@@ -818,6 +827,7 @@ function renderNomina(){
         <input type="date" class="mini" id="nFecha_${i}" value="${/^\d{4}-\d{2}-\d{2}$/.test(n.periodoLabel) ? n.periodoLabel : hoyISO()}" title="Fecha real en que salió del banco (viene precargada de 'Fecha de pago'; cámbiala si no es la real)">
         <select class="mini" id="nBanco_${i}">
           <option value="CONSTRUCTHOR-8695">Bancolombia 8695</option>
+          <option value="CONSTRUCTHOR-OTROS">Otro banco CONSTRUCTHOR</option>
           <option value="HABITAD-CAJA">Caja Social HABI+TAD</option>
         </select>
         <button class="action" onclick="marcarNomina(${i})">Marcar pagada</button>
@@ -969,6 +979,7 @@ function renderFacturas(){
         <span class="badge pendiente"><span class="dot"></span>Pendiente</span>
         <select class="mini" id="fBanco_${i}">
           <option value="CONSTRUCTHOR-8695">Bancolombia 8695</option>
+          <option value="CONSTRUCTHOR-OTROS">Otro banco CONSTRUCTHOR</option>
           <option value="HABITAD-CAJA">Caja Social HABI+TAD</option>
         </select>
         <button class="action" onclick="marcarFacturaPagada(${i})">Marcar pagada</button>
@@ -977,13 +988,15 @@ function renderFacturas(){
       <td class="muted">${f.fecha}</td>
       <td>${f.ben}</td>
       <td class="muted">${f.concepto}</td>
+      <td class="muted">${f.clasificacion || '—'}</td>
+      <td class="muted">${f.subcategoria || '—'}</td>
       <td class="mono">${money(f.valor)}</td>
       <td>${f.oc ? `<span class="badge neutro">${f.oc}</span>` : '<span class="muted">Sin OC</span>'}</td>
       <td class="muted">${bancoLabel(f.banco)}</td>
       <td>${estadoCell}</td>
       <td class="row-actions">${f.factura==="vinculada" ? '<span class="badge pagada"><span class="dot"></span>Vinculada</span>' : `<button class="action" onclick="vincularFactura(${i})">Vincular factura</button>`}</td>
     </tr>`;
-  }).join('')) || '<tr><td colspan="8" class="muted">Sin registros en este período.</td></tr>';
+  }).join('')) || '<tr><td colspan="10" class="muted">Sin registros en este período.</td></tr>';
 }
 async function vincularFactura(i){
   const row = facturas[i];
@@ -1121,6 +1134,7 @@ function renderIngresos(){
         <input type="date" class="mini" id="ingFechaRecibo_${i}" value="${hoyISO()}" title="Fecha real en que entró al banco">
         <select class="mini" id="ingBanco_${i}">
           <option value="CONSTRUCTHOR-8695">Bancolombia 8695</option>
+          <option value="CONSTRUCTHOR-OTROS">Otro banco CONSTRUCTHOR</option>
           <option value="HABITAD-CAJA">Caja Social HABI+TAD</option>
         </select>
         <input type="number" class="mini" id="ingVrRecibido_${i}" placeholder="${row.netoPagado}" title="Valor real recibido (si difiere del neto calculado)">
@@ -1234,8 +1248,8 @@ function exportNomina(){
   exportarExcel('nomina_san_antonio.xlsx', ['Empleado','Cedula','Grupo','Concepto','Periodo_causacion(AAAA-MM)','Periodo_causacion','Fecha_pago','Valor','Estado','Banco','Soporte'], rows);
 }
 function exportFacturas(){
-  const rows = facturas.filter(f=>pasaFiltro(f.periodo)).map(f=>[f.fecha,f.ben,f.concepto,f.valor,f.oc||'',bancoLabel(f.banco),f.estado,f.factura]);
-  exportarExcel('facturas_pagos_san_antonio.xlsx', ['Fecha','Beneficiario','Concepto','Valor','OC/OS','Banco','Estado','Factura'], rows);
+  const rows = facturas.filter(f=>pasaFiltro(f.periodo)).map(f=>[f.fecha,f.ben,f.concepto,f.clasificacion||'',f.subcategoria||'',f.valor,f.oc||'',bancoLabel(f.banco),f.estado,f.factura]);
+  exportarExcel('facturas_pagos_san_antonio.xlsx', ['Fecha','Beneficiario','Concepto','Clasificacion_Costo','Subcategoria','Valor','OC/OS','Banco','Estado','Factura'], rows);
 }
 function exportAnticipos(){
   const rows = [];
@@ -1251,7 +1265,7 @@ function exportBanco(){
   exportarExcel('banco_'+key.toLowerCase()+'.xlsx', ['Fecha','Descripción','Tipo','Valor','Saldo'], rows);
 }
 function descargarPlantilla(){
-  exportarExcel('plantilla_carga_pagos.xlsx', ['tipo(nomina/factura)','fecha_pago','nombre','concepto(en nomina: Salario/Liquidacion/Seguridad social, vacio=Salario)','valor','oc','soporte(si/no)','banco(CONSTRUCTHOR-8695/HABITAD-CAJA)','cedula(solo nomina)','grupo(solo nomina)','periodo_contable(obligatorio en Liquidacion — ej 2026-06, el mes en que se causó, casi siempre distinto a fecha_pago; opcional en Salario/Seguridad social si coincide con fecha_pago)'], []);
+  exportarExcel('plantilla_carga_pagos.xlsx', ['tipo(nomina/factura)','fecha_pago','nombre','concepto(en nomina: Salario/Liquidacion/Seguridad social, vacio=Salario)','valor','oc','soporte(si/no)','banco(CONSTRUCTHOR-8695/CONSTRUCTHOR-OTROS/HABITAD-CAJA)','cedula(solo nomina)','grupo(solo nomina)','periodo_contable(obligatorio en Liquidacion — ej 2026-06, el mes en que se causó, casi siempre distinto a fecha_pago; opcional en Salario/Seguridad social si coincide con fecha_pago)','clasificacion_costo(solo factura — ej. Materiales/Mano de obra/Maquinaria/Administrativo)','subcategoria(solo factura — ej. Comite de obra/Topografia/Dotacion/Papeleria)'], []);
 }
 
 // ============================================================
@@ -1262,6 +1276,8 @@ async function registrarPuntual(){
   const fecha = document.getElementById('qFecha').value || hoyISO();
   const ben = document.getElementById('qBen').value.trim();
   const concepto = document.getElementById('qConcepto').value.trim();
+  const clasificacion = document.getElementById('qClasificacion').value.trim();
+  const subcategoria = document.getElementById('qSubcategoria').value.trim();
   const valor = Number(document.getElementById('qValor').value)||0;
   const oc = document.getElementById('qOC').value.trim();
   const banco = document.getElementById('qBanco').value;
@@ -1270,16 +1286,19 @@ async function registrarPuntual(){
   btn.disabled = true;
   try{
     const fields = {
-      Fecha: fecha, Beneficiario: ben, Concepto: concepto||'—', Valor: valor,
+      Fecha: fecha, Beneficiario: ben, Concepto: concepto||'—',
+      Clasificacion_Costo: clasificacion||'', Subcategoria: subcategoria||'', Valor: valor,
       OC_OS: oc||'', Estado: estadoAirtable(tieneSoporte?'pagada':'pendiente'),
       Factura_Estado: 'Pendiente', Periodo: periodoDe(fecha)
     };
     if(tieneSoporte) fields.Banco = bancoLabel(banco);
     const recs = await atWrite('Pago proveedores','create',[{fields}]);
-    facturas.unshift({_id:recs[0].id, fecha, periodo:periodoDe(fecha), ben, concepto:concepto||'—', valor, oc:oc||null,
+    facturas.unshift({_id:recs[0].id, fecha, periodo:periodoDe(fecha), ben, concepto:concepto||'—',
+      clasificacion:clasificacion||'', subcategoria:subcategoria||'', valor, oc:oc||null,
       estado: tieneSoporte?'pagada':'pendiente', factura:'pendiente', banco: tieneSoporte?banco:null});
     if(tieneSoporte) await registrarMovimientoBanco(banco, fecha, 'Pago — '+ben, valor);
     document.getElementById('qBen').value=''; document.getElementById('qConcepto').value='';
+    document.getElementById('qClasificacion').value=''; document.getElementById('qSubcategoria').value='';
     document.getElementById('qValor').value=''; document.getElementById('qOC').value='';
     document.getElementById('qSoporte').checked=false;
     const c = document.getElementById('qConfirm'); c.style.display='block'; setTimeout(()=>c.style.display='none', 3500);
@@ -1319,7 +1338,7 @@ async function agregarFilasBulk(lineas){
   lineas.forEach(l=>{
     if(!l || !String(l).trim()) return;
     const partes = String(l).split(',').map(s=>(s||'').trim());
-    const [tipoRaw,fecha,nombre,concepto,valorStr,oc,soporte,banco,cedula,grupo,periodoManual] = partes;
+    const [tipoRaw,fecha,nombre,concepto,valorStr,oc,soporte,banco,cedula,grupo,periodoManual,clasificacion,subcategoria] = partes;
     const tipo = (tipoRaw||'').toLowerCase();
     if(!fecha || tipo.indexOf('tipo')===0 || fecha.toLowerCase().indexOf('fecha')===0) return;
     const tienesop = /^s/i.test(soporte||'');
@@ -1340,10 +1359,12 @@ async function agregarFilasBulk(lineas){
         valor, estado:tienesop?'pagada':'pendiente', soporte:null, banco:tienesop?bancoUsado:null},
         banco: tienesop?bancoUsado:null, fecha, tipo:'nomina', valor, nombre: nombreFinal});
     } else {
-      const fields = {Fecha:fecha, Beneficiario:nombreFinal, Concepto:concepto||'—', Valor:valor, OC_OS:oc||'',
+      const fields = {Fecha:fecha, Beneficiario:nombreFinal, Concepto:concepto||'—',
+        Clasificacion_Costo: clasificacion||'', Subcategoria: subcategoria||'', Valor:valor, OC_OS:oc||'',
         Estado:estadoAirtable(tienesop?'pagada':'pendiente'), Factura_Estado:'Pendiente', Periodo: periodoFinal};
       if(tienesop) fields.Banco = bancoLabel(bancoUsado);
       facturaNuevas.push({fields, local:{fecha, periodo:periodoFinal, ben:nombreFinal, concepto:concepto||'—',
+        clasificacion:clasificacion||'', subcategoria:subcategoria||'',
         valor, oc:oc||null, estado:tienesop?'pagada':'pendiente', factura:'pendiente', banco:tienesop?bancoUsado:null},
         banco: tienesop?bancoUsado:null, fecha, tipo:'factura', valor, nombre: nombreFinal});
     }
