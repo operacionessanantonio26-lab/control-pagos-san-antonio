@@ -1334,11 +1334,16 @@ async function registrarPuntual(){
   try{
     const fields = {
       Fecha: fecha, Beneficiario: ben, Concepto: concepto||'—',
-      Clasificacion_Costo: clasificacion||'', Subcategoria: subcategoria||'', Deducible: deducible||'', Valor: valor,
+      Valor: valor,
       Valor_Bruto: bruto, IVA: iva, Impuesto_Consumo: impConsumo, RTE_Fuente: rteFte, RTE_ICA: rteIca, Otros_Dsctos: otrosDsctos,
       OC_OS: oc||'', Estado: estadoAirtable(tieneSoporte?'pagada':'pendiente'),
       Factura_Estado: 'Pendiente', Periodo: periodoDe(fecha)
     };
+    // Mismo cuidado que en la carga masiva: Clasificacion_Costo, Subcategoria y Deducible son
+    // Single Select en Airtable, así que solo se mandan si traen valor (ver comentario en agregarFilasBulk).
+    if(clasificacion) fields.Clasificacion_Costo = clasificacion;
+    if(subcategoria) fields.Subcategoria = subcategoria;
+    if(deducible) fields.Deducible = deducible;
     if(tieneSoporte) fields.Banco = bancoLabel(banco);
     const recs = await atWrite('Pago proveedores','create',[{fields}]);
     facturas.unshift({_id:recs[0].id, fecha, periodo:periodoDe(fecha), ben, concepto:concepto||'—',
@@ -1420,9 +1425,17 @@ async function agregarFilasBulk(lineas){
       const tieneDesglose = bruto>0 || iva>0 || impConsumo>0 || rteFte>0 || rteIca>0 || otrosDsctos>0;
       const valor = tieneDesglose ? (bruto + iva + impConsumo - rteFte - rteIca - otrosDsctos) : valorManual;
       const fields = {Fecha:fecha, Beneficiario:nombreFinal, Concepto:concepto||'—',
-        Clasificacion_Costo: clasificacion||'', Subcategoria: subcategoria||'', Deducible: deducible||'', Valor:valor, OC_OS:oc||'',
+        Valor:valor, OC_OS:oc||'',
         Valor_Bruto: bruto, IVA: iva, Impuesto_Consumo: impConsumo, RTE_Fuente: rteFte, RTE_ICA: rteIca, Otros_Dsctos: otrosDsctos,
         Estado:estadoAirtable(tienesop?'pagada':'pendiente'), Factura_Estado:'Pendiente', Periodo: periodoFinal};
+      // Clasificacion_Costo, Subcategoria y Deducible son campos "Single Select" en Airtable: si se
+      // manda un valor vacío "" en vez de omitir la llave, Airtable intenta crear una nueva opción
+      // de selección llamada "" y el token no tiene permiso para crear opciones nuevas, lo que
+      // revienta TODO el lote con "Insufficient permissions to create new select option". Por eso
+      // estos tres solo se incluyen cuando sí traen un valor.
+      if(clasificacion) fields.Clasificacion_Costo = clasificacion;
+      if(subcategoria) fields.Subcategoria = subcategoria;
+      if(deducible) fields.Deducible = deducible;
       if(tienesop) fields.Banco = bancoLabel(bancoUsado);
       facturaNuevas.push({fields, local:{fecha, periodo:periodoFinal, ben:nombreFinal, concepto:concepto||'—',
         clasificacion:clasificacion||'', subcategoria:subcategoria||'', deducible:deducible||'',
