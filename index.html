@@ -1458,12 +1458,17 @@ async function agregarFilasBulk(lineas){
   }
   const conSoporte = [...nominaNuevas, ...facturaNuevas].filter(x=>x.banco);
   if(conSoporte.length){
+    // Antes esto forzaba Valor:-Math.abs(x.valor), es decir que SIEMPRE registraba una salida de banco
+    // aunque x.valor viniera negativo (una nota crédito o reversión, ej. VPNC2 anulando MYD132). Con
+    // Math.abs, una fila negativa también quedaba como salida en vez de entrada, duplicando el efecto
+    // en vez de cancelarlo. Al solo invertir el signo (-x.valor) una fila positiva sigue saliendo como
+    // negativo (salida) y una fila negativa entra como positivo (cancela el pago original).
     const bancoRecs = await atWrite('Banco mvtos','create', conSoporte.map(x=>({fields:{
-      Cuenta: bancoLabel(x.banco), Fecha:x.fecha, Descripcion:(x.tipo==='nomina'?'Nómina — ':'Pago — ')+x.nombre, Tipo:'Pago', Valor:-Math.abs(x.valor)
+      Cuenta: bancoLabel(x.banco), Fecha:x.fecha, Descripcion:(x.tipo==='nomina'?'Nómina — ':'Pago — ')+x.nombre, Tipo:'Pago', Valor:-x.valor
     }})));
     bancoRecs.forEach((r,idx)=>{
       const x = conSoporte[idx];
-      bancos[x.banco].movimientos.push({_id:r.id, fecha:x.fecha, desc:(x.tipo==='nomina'?'Nómina — ':'Pago — ')+x.nombre, valor:-Math.abs(x.valor), tipo:'pago'});
+      bancos[x.banco].movimientos.push({_id:r.id, fecha:x.fecha, desc:(x.tipo==='nomina'?'Nómina — ':'Pago — ')+x.nombre, valor:-x.valor, tipo:'pago'});
     });
   }
   return creadas;
