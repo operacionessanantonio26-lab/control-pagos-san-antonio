@@ -242,6 +242,7 @@
     <button data-tab="nomina">Nómina</button>
     <button data-tab="facturas">Facturas y pagos</button>
     <button data-tab="anticipos">Anticipos</button>
+    <button data-tab="consolidado">Consolidado</button>
     <button data-tab="ingresos">Ingresos</button>
     <button data-tab="banco">Banco</button>
     <button data-tab="cargar">Cargar pagos</button>
@@ -325,6 +326,24 @@
         <button class="action" onclick="exportAnticipos()">Exportar a Excel (.xlsx)</button>
       </div>
       <div id="anticiposList"></div>
+    </div>
+  </section>
+
+  <section id="consolidado">
+    <div class="card">
+      <div class="card-head">
+        <div><h2>Consolidado por proveedor y tipo de costo</h2><p class="hint">Cruza Facturas y pagos con Anticipos mvtos para que el total "pagado" por proveedor sea el real (incluye anticipos ya girados, no solo lo que quedó en Pago proveedores). Las legalizaciones no suman aparte: ya quedan reflejadas al no duplicar el anticipo que cubren. "Pendiente (CxP)" es lo que aún no se ha pagado. El detalle respeta el período elegido arriba.</p></div>
+        <button class="action" onclick="exportConsolidado()">Exportar a Excel (.xlsx)</button>
+      </div>
+      <div class="kpis" style="margin-bottom:16px;">
+        <div class="kpi"><div class="label">Total pagado (real)</div><div class="value" id="kpiConsPagado">—</div></div>
+        <div class="kpi"><div class="label">Total pendiente (CxP)</div><div class="value amber" id="kpiConsPendiente">—</div></div>
+      </div>
+      <div class="tablewrap compact"><table>
+        <thead><tr><th>Proveedor</th><th>Tipo de costo</th><th>Pagado (real)</th><th>Pendiente (CxP)</th><th>Total</th></tr></thead>
+        <tbody id="consolidadoBody"></tbody>
+      </table></div>
+      <p class="lanesub" style="margin-top:8px;">"Tipo de costo" sale de Clasificacion_Costo en ambas tablas. Un anticipo sin ese campo lleno (p. ej. historial viejo pendiente de backfill) aparece como "Sin clasificar".</p>
     </div>
   </section>
 
@@ -746,7 +765,8 @@ async function cargarTodo(){
     if(!grupos[nombre]) grupos[nombre] = {contratista:nombre, nit:r.fields.NIT||'—', oficio:r.fields.Oficio||'', movs:[]};
     grupos[nombre].movs.push({
       _id: r.id, fecha: r.fields.Fecha||'', fechaLabel: fechaCorta(r.fields.Fecha),
-      tipo: r.fields.Tipo || 'Anticipo', doc: r.fields.Documento || '', valor: r.fields.Valor || 0
+      tipo: r.fields.Tipo || 'Anticipo', doc: r.fields.Documento || '', valor: r.fields.Valor || 0,
+      clasificacion: r.fields.Clasificacion_Costo || ''
     });
   });
   anticipos = Object.values(grupos).map(c=>{
@@ -1222,6 +1242,55 @@ function renderAnticipos(){
   }).join('') || '<p class="muted">Todavía no hay anticipos registrados.</p>';
 }
 
+// ---- Consolidado: cruce de Facturas (Pago proveedores) + Anticipos mvtos por proveedor/tipo de costo ----
+// Reglas: una fila de Anticipo (Tipo="Anticipo") es plata real que salió del banco → suma a "pagado".
+// Una fila de Legalizacion NO suma aparte: es solo el ajuste contable que cierra el anticipo ya
+// contado cuando se giró, así que se ignora aquí (si no, se duplicaría ese valor).
+// Una factura con soporte (estado "pagada") suma a "pagado"; sin soporte (estado "pendiente") suma
+// a "pendiente" (CxP) — es plata que todavía no ha salido del banco pero ya se debe.
+// El tipo de costo se agrupa sin distinguir mayúsculas/minúsculas (ej. "Otros" y "OTROS" quedan
+// juntos), porque así quedó cargado el histórico; valores realmente distintos (ej. "Minicargador"
+// vs "Maquinaria") se mantienen separados — si se quieren unificar es una decisión de Diana, no algo
+// que la app decida sola.
+function datosConsolidado(){
+  const grupos = {};
+  function add(proveedor, clasifRaw, campo, valor){
+    if(!valor) return;
+    const clasif = (clasifRaw||'').trim();
+    const key = proveedor + '|' + clasif.toUpperCase();
+    if(!grupos[key]) grupos[key] = {proveedor, clasificacion: clasif || 'Sin clasificar', pagado:0, pendiente:0};
+    grupos[key][campo] += valor;
+  }
+  facturas.filter(f=>pasaFiltro(f.periodo)).forEach(f=>{
+    if(f.estado==='pagada') add(f.ben, f.clasificacion, 'pagado', f.valor||0);
+    else add(f.ben, f.clasificacion, 'pendiente', f.valor||0);
+  });
+  anticipos.forEach(c=>{
+    c.movs.filter(m=>pasaFiltro(periodoDe(m.fecha))).forEach(m=>{
+      if(m.tipo==='Anticipo') add(c.contratista, m.clasificacion, 'pagado', m.valor||0);
+    });
+  });
+  return Object.values(grupos).sort((a,b)=> a.proveedor.localeCompare(b.proveedor) || a.clasificacion.localeCompare(b.clasificacion));
+}
+function renderConsolidado(){
+  const datos = datosConsolidado();
+  let totalPagado=0, totalPendiente=0;
+  document.getElementById('consolidadoBody').innerHTML = datos.map(g=>{
+    totalPagado += g.pagado; totalPendiente += g.pendiente;
+    return `<tr><td>${g.proveedor}</td><td class="muted">${g.clasificacion}</td>
+      <td class="mono">${money(g.pagado)}</td>
+      <td class="mono" style="${g.pendiente?'color:var(--amber-ink)':''}">${money(g.pendiente)}</td>
+      <td class="mono">${money(g.pagado+g.pendiente)}</td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted">Sin datos en este período.</td></tr>';
+  document.getElementById('kpiConsPagado').textContent = money(totalPagado);
+  document.getElementById('kpiConsPendiente').textContent = money(totalPendiente);
+}
+function exportConsolidado(){
+  const datos = datosConsolidado();
+  const rows = datos.map(g=>[g.proveedor, g.clasificacion, g.pagado, g.pendiente, g.pagado+g.pendiente]);
+  exportarExcel('consolidado_proveedor_tipo_costo.xlsx', ['Proveedor','Tipo_Costo','Pagado_real','Pendiente_CxP','Total'], rows);
+}
+
 function renderBanco(){
   const key = document.getElementById('bancoSel').value;
   const b = bancos[key];
@@ -1258,7 +1327,7 @@ async function agregarAjuste(){
   }catch(err){ alert('No se pudo agregar el ajuste: '+err.message); }
 }
 
-function renderAll(){ renderKPIs(); renderNomina(); renderFacturas(); renderAnticipos(); renderIngresos(); renderBanco(); }
+function renderAll(){ renderKPIs(); renderNomina(); renderFacturas(); renderAnticipos(); renderConsolidado(); renderIngresos(); renderBanco(); }
 
 // ============================================================
 // Exportar a Excel real (.xlsx)
