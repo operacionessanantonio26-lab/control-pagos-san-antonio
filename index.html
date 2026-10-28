@@ -273,6 +273,15 @@
         <div><h2>Nómina por período</h2><p class="hint">Al subir el soporte del pago se marca "Pagada" y se registra el movimiento en el banco elegido. Para un pago único por empleado usa "Marcar pagada"; para un pago consolidado (ej. seguridad social, una sola transferencia para varios empleados) usa la selección múltiple de abajo.</p></div>
         <button class="action" onclick="exportNomina()">Exportar a Excel (.xlsx)</button>
       </div>
+      <div class="field" style="max-width:260px; margin-bottom:10px;">
+        <label>Filtrar por concepto</label>
+        <select id="nominaConceptoFiltro" onchange="onConceptoNominaChange()">
+          <option value="todos">Todos</option>
+          <option value="Salario">Salario</option>
+          <option value="Liquidación">Liquidación</option>
+          <option value="Seguridad social">Seguridad social</option>
+        </select>
+      </div>
       <div class="tablewrap compact"><table>
         <thead><tr><th><input type="checkbox" id="nominaSelAll" onchange="toggleSeleccionarTodoNomina(this)" title="Seleccionar todas las pendientes visibles"></th><th>Empleado</th><th>Cédula</th><th>Grupo</th><th>Concepto</th><th title="Período de causación">Período</th><th>F. pago</th><th>Valor</th><th>Estado</th><th>Banco</th><th>Soporte</th><th>Acción</th></tr></thead>
         <tbody id="nominaBody"></tbody>
@@ -585,6 +594,8 @@ function entrarApp(empresa){
 
 const money = n => Number(n||0).toLocaleString('es-CO', {style:'currency', currency:'COP', maximumFractionDigits:0});
 let periodoActual = 'todos';
+let conceptoFiltroNomina = 'todos';
+function onConceptoNominaChange(){ conceptoFiltroNomina = document.getElementById('nominaConceptoFiltro').value; renderNomina(); }
 // OJO: estos textos deben ser EXACTAMENTE iguales a las opciones de Selección única creadas en Airtable
 const BANCOS = {'CONSTRUCTHOR-8695':'Bancolombia CONSTRUCTHOR (cta 8695)', 'CONSTRUCTHOR-OTROS':'Otro banco CONSTRUCTHOR', 'HABITAD-CAJA':'Caja Social HABI+TAD'};
 function bancoLabel(k){ return k ? (BANCOS[k]||k) : '—'; }
@@ -858,8 +869,11 @@ function renderKPIs(){
   `).join('') || '<tr><td colspan="4" class="muted">Sin alertas por ahora.</td></tr>';
 }
 
+function filtraConceptoNomina_(n){
+  return conceptoFiltroNomina==='todos' || (n.concepto && n.concepto.trim() ? n.concepto : 'Salario')===conceptoFiltroNomina;
+}
 function renderNomina(){
-  const rows = nomina.filter(n=>pasaFiltro(n.periodo));
+  const rows = nomina.filter(n=>pasaFiltro(n.periodo) && filtraConceptoNomina_(n));
   document.getElementById('nominaBody').innerHTML = (rows.map((n)=>{
     const i = nomina.indexOf(n);
     const accion = n.estado==="pendiente" ? `
@@ -950,7 +964,7 @@ function toggleNominaSel(id, checked, checkboxEl){
   actualizarResumenSeleccion();
 }
 function toggleSeleccionarTodoNomina(checkbox){
-  const rows = nomina.filter(n=>pasaFiltro(n.periodo));
+  const rows = nomina.filter(n=>pasaFiltro(n.periodo) && filtraConceptoNomina_(n));
   rows.forEach((n)=>{
     if(n.estado==='pendiente'){
       if(checkbox.checked) nominaSeleccion.add(n._id); else nominaSeleccion.delete(n._id);
